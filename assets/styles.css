@@ -1,6 +1,6 @@
 :root {
-  --paper: #fbf7ef;
-  --sidebar: #f4eee3;
+  --paper: #fdfcf9;
+  --sidebar: #faf8f4;
   --ink: #3d342c;
   --muted: #7a6653;
   --line: #e8ddce;
@@ -21,8 +21,8 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline: 2px solid va
 button:disabled { cursor: wait; opacity: .6; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
-.lock-screen { min-height: 100svh; display: grid; place-items: center; padding: 56px 24px; background: #f4eee3; }
-.lock-card { width: min(100%,426px); padding: 36px; background: #fffcf7; border: 1px solid #e4d8c7; border-radius: 20px; box-shadow: 0 8px 30px rgba(91,67,41,.035); }
+.lock-screen { min-height: 100svh; display: grid; place-items: center; padding: 56px 24px; background: #faf9f6; }
+.lock-card { width: min(100%,426px); padding: 36px; background: rgba(255,255,255,.65); border: 1px solid #f0eeea; border-radius: 16px; box-shadow: none; }
 .eyebrow { margin: 0 0 14px; color: var(--muted); font-size: 12px; letter-spacing: .16em; }
 .lock-card h1 { margin: 0; font: 500 58px/1.25 var(--serif); letter-spacing: .03em; }
 .title-dot { color: #aa896b; }
@@ -38,6 +38,7 @@ button:disabled { cursor: wait; opacity: .6; }
 .unlock-button span { font-size: 18px; }
 .unlock-status { min-height: 22px; margin: 10px 0 0; font-size: 13px; color: #9b523b; }
 .lock-hint { margin: 19px 0 0; font-size: 11px; color: #94816e; line-height: 1.8; }
+.password-reminder { margin: 7px 0 0; font-size: 11px; color: #8b8680; line-height: 1.8; }
 .noscript-message { text-align: center; padding: 20px; }
 .skip-link { position: fixed; top: -100px; left: 10px; z-index: 10; padding: 8px 12px; background: var(--ink); color: white; }
 .skip-link:focus { top: 10px; }
@@ -112,7 +113,7 @@ button:disabled { cursor: wait; opacity: .6; }
   .markdown-body { font-size: 16px; }
 }
 @media (max-width:760px) {
-  .mobile-header { display: flex; position: sticky; top: 0; z-index: 3; min-height: 64px; align-items: center; justify-content: space-between; padding: env(safe-area-inset-top,0px) 16px 0; background: rgba(251,247,239,.97); border-bottom: 1px solid #e9ddcd; }
+  .mobile-header { display: flex; position: sticky; top: 0; z-index: 3; min-height: 64px; align-items: center; justify-content: space-between; padding: env(safe-area-inset-top,0px) 16px 0; background: rgba(253,252,249,.97); border-bottom: 1px solid #e9ddcd; }
   .mobile-brand { font: 22px var(--serif); }
   .icon-button { display: grid; place-items: center; min-width: 44px; min-height: 44px; padding: 0; border-radius: 10px; background: transparent; border: 0; color: #876a51; font-size: 23px; }
   .icon-button:hover { background: #f1e7d8; }
@@ -137,7 +138,7 @@ button:disabled { cursor: wait; opacity: .6; }
   .article-navigation a { padding: 12px; }
   .sidebar-footer { font-size: 10px; }
   .lock-screen { align-items: start; padding: clamp(52px,11svh,98px) 20px max(32px,env(safe-area-inset-bottom,0px)); }
-  .lock-card { max-width: 386px; padding: 28px 25px 25px; border-radius: 18px; }
+  .lock-card { max-width: 386px; padding: 28px 25px 25px; border-radius: 14px; }
   .lock-card h1 { font-size: 52px; }
   .lock-intro { margin: 15px 0 27px; font-size: 13px; }
   .lock-hint { margin-top: 14px; }

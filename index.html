@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'none'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-src 'none'">
+  <title>随心</title>
+  <link rel="stylesheet" href="./assets/styles.css">
+  <script src="./assets/vendor/marked.umd.js" defer></script>
+  <script src="./assets/vendor/purify.min.js" defer></script>
+  <script src="./assets/app.js" defer></script>
+</head>
+<body>
+  <section class="lock-screen" id="lock-screen" aria-labelledby="lock-title">
+    <div class="lock-card">
+      <p class="eyebrow">个人笔记</p>
+      <h1 id="lock-title">随心<span class="title-dot" aria-hidden="true">。</span></h1>
+      <p class="lock-intro">输入访问密码，打开笔记。</p>
+      <form id="unlock-form">
+        <label for="password">访问密码</label>
+        <div class="password-wrap">
+          <input id="password" name="password" type="password" autocomplete="current-password" spellcheck="false" required aria-describedby="unlock-status">
+          <button class="password-toggle" id="password-toggle" type="button" aria-label="显示密码" aria-pressed="false">显示</button>
+        </div>
+        <button class="unlock-button" id="unlock-button" type="submit">打开笔记 <span aria-hidden="true">↗</span></button>
+        <p class="unlock-status" id="unlock-status" role="status" aria-live="polite"></p>
+      </form>
+      <p class="lock-hint">密码仅在当前页面中用于解锁。</p>
+    </div>
+    <span class="lock-corner" aria-hidden="true">随心记，慢慢读。</span>
+  </section>
+
+  <div class="app-shell" id="app-shell" hidden>
+    <a class="skip-link" href="#article">跳到正文</a>
+    <header class="mobile-header">
+      <button class="icon-button" id="menu-toggle" type="button" aria-label="打开笔记目录" aria-controls="sidebar" aria-expanded="false"><span aria-hidden="true">☰</span></button>
+      <span class="mobile-brand">随心</span>
+      <button class="text-button" id="mobile-lock" type="button">锁定</button>
+    </header>
+    <button class="drawer-backdrop" id="drawer-backdrop" type="button" tabindex="-1" aria-label="关闭目录" hidden></button>
+    <aside class="sidebar" id="sidebar" aria-label="笔记目录">
+      <div class="sidebar-brand">
+        <a href="#" id="home-link" class="brand">随心<span aria-hidden="true">。</span></a>
+        <button class="drawer-close icon-button" id="drawer-close" type="button" aria-label="关闭笔记目录">×</button>
+      </div>
+      <div class="search-wrap">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <label class="sr-only" for="search">搜索笔记标题和正文</label>
+        <input id="search" type="search" placeholder="搜索笔记" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="list-heading"><span>所有笔记</span><span id="note-count"></span></div>
+      <nav class="note-list" id="note-list" aria-label="笔记"></nav>
+      <p class="search-empty" id="search-empty" hidden>没有找到相关笔记。<br>试试另一个关键词。</p>
+      <footer class="sidebar-footer"><span id="site-updated"></span><button class="text-button" id="lock-button" type="button">锁定</button></footer>
+    </aside>
+    <main class="reading-pane" id="reading-pane">
+      <div class="reading-topline"><span>随心 / 笔记</span><span id="reading-progress"></span></div>
+      <article class="article" id="article" tabindex="-1" aria-labelledby="article-title">
+        <header class="article-header"><p class="article-date" id="article-date"></p><h1 id="article-title"></h1></header>
+        <div class="markdown-body" id="article-body"></div>
+      </article>
+      <nav class="article-navigation" id="article-navigation" aria-label="前后笔记"></nav>
+      <p class="reading-status sr-only" id="reading-status" role="status" aria-live="polite"></p>
+    </main>
+  </div>
+  <noscript><p class="noscript-message">请启用浏览器的 JavaScript，以解锁和阅读笔记。</p></noscript>
+</body>
+</html>

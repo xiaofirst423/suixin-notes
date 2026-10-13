@@ -1,0 +1,353 @@
+(function () {
+  'use strict';
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  }
+
+  function normalizePath(value) {
+    let path = String(value || '').replace(/\\/g, '/').trim();
+    try { path = decodeURIComponent(path); } catch (_) { /* Literal malformed percent signs are valid filenames. */ }
+    return path.replace(/^\.\//, '').replace(/\.md$/i, '').normalize('NFC');
+  }
+
+  function createNoteIndex(notes) {
+    const byPath = new Map();
+    const byName = new Map();
+    notes.forEach((note) => {
+      const path = normalizePath(note.path || note.title);
+      byPath.set(path, note);
+      const name = path.split('/').pop();
+      if (!byName.has(name)) byName.set(name, note);
+      else byName.set(name, null); // A repeated basename is not a unique link target.
+    });
+    return { byPath, byName };
+  }
+
+  function resolveNote(target, index, currentNote, relative = false) {
+    const path = normalizePath(target).replace(/^随心\//, '');
+    if (!path || path.startsWith('/') || /^[a-z]+:/i.test(path)) return null;
+    if (!path.includes('/')) return index.byPath.get(path) || index.byName.get(path) || null;
+    if (relative && currentNote) {
+      const parts = normalizePath(currentNote.path || currentNote.title).split('/').slice(0, -1);
+      for (const part of path.split('/')) {
+        if (part === '..') { if (!parts.length) return null; parts.pop(); }
+        else if (part !== '.' && part) parts.push(part);
+      }
+      return index.byPath.get(parts.join('/')) || null;
+    }
+    if (path.split('/').some((part) => part === '..' || part === '.')) return null;
+    return index.byPath.get(path) || null;
+  }
+
+  function noteHref(id, heading = '') {
+    const route = new URLSearchParams({ note: id });
+    if (heading) route.set('heading', heading);
+    return '#' + route.toString();
+  }
+
+  function parseRoute(hash) {
+    const route = new URLSearchParams(String(hash || '').replace(/^#/, ''));
+    return { id: route.get('note') || '', heading: route.get('heading') || '' };
+  }
+
+  function searchNotes(notes, query) {
+    const words = String(query).normalize('NFKC').toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
+    return notes.filter((note) => {
+      const haystack = (note.title + '\n' + note.markdown).normalize('NFKC').toLocaleLowerCase();
+      return words.every((word) => haystack.includes(word));
+    });
+  }
+
+  function decodeBase64(value) {
+    if (typeof value !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) throw new Error('Invalid encrypted data');
+    return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+  }
+
+  async function decryptNotes(envelope, password) {
+    if (!globalThis.crypto || !crypto.subtle) throw new Error('Secure browser required');
+    if (!envelope || envelope.version !== 1 || envelope.kdf?.name !== 'PBKDF2' || envelope.kdf.hash !== 'SHA-256' ||
+        envelope.kdf.iterations !== 600000 || envelope.cipher?.name !== 'AES-GCM' || envelope.cipher.tagLength !== 128) {
+      throw new Error('Invalid encrypted data');
+    }
+    const salt = decodeBase64(envelope.kdf.salt);
+    const iv = decodeBase64(envelope.cipher.iv);
+    const ciphertext = decodeBase64(envelope.ciphertext);
+    if (salt.length < 16 || iv.length !== 12 || ciphertext.length < 16) throw new Error('Invalid encrypted data');
+    const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', iterations: 600000, salt }, material,
+      { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, key, ciphertext);
+    const bytes = new Uint8Array(plaintext);
+    let data;
+    try { data = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
+    finally { bytes.fill(0); }
+    if (!data || !Array.isArray(data.notes)) throw new Error('Invalid notes data');
+    const ids = new Set();
+    for (const note of data.notes) {
+      if (!note || typeof note.id !== 'string' || !note.id || ids.has(note.id) || typeof note.title !== 'string' ||
+          typeof note.markdown !== 'string' || typeof note.path !== 'string') throw new Error('Invalid notes data');
+      ids.add(note.id);
+    }
+    return data;
+  }
+
+  function createMarkdownParser(index, currentNote) {
+    const parser = new marked.Marked({ gfm: true, breaks: true });
+    parser.use({
+      extensions: [{
+        name: 'wikilink', level: 'inline',
+        start(source) { const offset = source.search(/!?\[\[/); return offset < 0 ? undefined : offset; },
+        tokenizer(source) {
+          const match = /^(!?)\[\[([^\]\n]+)\]\]/.exec(source);
+          if (!match) return undefined;
+          const [target, ...alias] = match[2].split('|');
+          const [path, ...heading] = target.split('#');
+          return { type: 'wikilink', raw: match[0], embed: !!match[1], target: path.trim(), heading: heading.join('#').trim(),
+            text: alias.join('|').trim() || normalizePath(path).split('/').pop() || heading.join('#') };
+        },
+        renderer(token) {
+          if (token.embed) return '<span class="attachment-note">' + escapeHtml(token.text) + '（附件未同步）</span>';
+          const note = token.target ? resolveNote(token.target, index, currentNote) : currentNote;
+          if (!note) return '<span class="unavailable-link" title="这篇笔记未收录在随心中">' + escapeHtml(token.text) + '</span>';
+          return '<a href="' + escapeHtml(noteHref(note.id, token.heading)) + '">' + escapeHtml(token.text) + '</a>';
+        }
+      }],
+      renderer: {
+        image({ text }) { return '<span class="attachment-note">' + escapeHtml(text || '图片') + '（附件未同步）</span>'; }
+      }
+    });
+    return parser;
+  }
+
+  // Exposed only for local checks; no password or decrypted state is included.
+  globalThis.SuixinCore = { escapeHtml, normalizePath, createNoteIndex, resolveNote, noteHref, parseRoute, searchNotes, decryptNotes, createMarkdownParser };
+  if (typeof document === 'undefined') return;
+
+  const $ = (id) => document.getElementById(id);
+  const state = { data: null, index: null, activeId: '', busy: false, drawerOpen: false, unlockGeneration: 0 };
+  const dateFormatter = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Shanghai' });
+  const mobile = window.matchMedia('(max-width: 760px)');
+  let drawerReturnFocus = null;
+
+  function formatDate(value) {
+    const date = value ? new Date(value) : null;
+    return date && Number.isFinite(date.getTime()) ? dateFormatter.format(date) : '';
+  }
+
+  function setDrawer(open) {
+    if (open && !mobile.matches) return;
+    state.drawerOpen = open;
+    document.body.classList.toggle('drawer-open', open);
+    $('drawer-backdrop').hidden = !open;
+    $('menu-toggle').setAttribute('aria-expanded', String(open));
+    $('sidebar').inert = mobile.matches && !open;
+    if (open) { drawerReturnFocus = document.activeElement; $('drawer-close').focus(); }
+    else if (drawerReturnFocus) { drawerReturnFocus.focus(); drawerReturnFocus = null; }
+  }
+
+  function renderList() {
+    const notes = searchNotes(state.data.notes, $('search').value);
+    $('note-count').textContent = notes.length + ' 篇';
+    $('search-empty').hidden = notes.length > 0;
+    $('note-list').replaceChildren();
+    for (const note of notes) {
+      const link = document.createElement('a');
+      link.className = 'note-link';
+      link.href = noteHref(note.id);
+      if (note.id === state.activeId) link.setAttribute('aria-current', 'page');
+      const title = document.createElement('span');
+      title.className = 'note-link-title'; title.textContent = note.title;
+      const excerpt = document.createElement('span');
+      excerpt.className = 'note-link-excerpt'; excerpt.textContent = note.excerpt || '';
+      link.append(title, excerpt); $('note-list').append(link);
+    }
+  }
+
+  function sanitizeMarkdown(markdown, note) {
+    const parser = createMarkdownParser(state.index, note);
+    const dirty = parser.parse(markdown.replace(/^\uFEFF/, ''));
+    const fragment = DOMPurify.sanitize(dirty, {
+      RETURN_DOM_FRAGMENT: true,
+      ALLOWED_TAGS: ['p', 'br', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'del', 's', 'blockquote', 'ul', 'ol', 'li',
+        'pre', 'code', 'a', 'span', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'input', 'details', 'summary', 'sub', 'sup', 'mark'],
+      ALLOWED_ATTR: ['href', 'title', 'class', 'start', 'type', 'checked', 'disabled', 'colspan', 'rowspan'],
+      ALLOW_DATA_ATTR: false, ALLOW_ARIA_ATTR: false
+    });
+    for (const input of fragment.querySelectorAll('input')) {
+      if (input.type !== 'checkbox') { input.remove(); continue; }
+      input.disabled = true;
+    }
+    for (const anchor of fragment.querySelectorAll('a')) {
+      const href = anchor.getAttribute('href') || '';
+      if (href.startsWith('#note=')) {
+        if (!state.data.notes.some((entry) => entry.id === parseRoute(href).id)) replaceUnavailable(anchor);
+      } else if (href.startsWith('#')) {
+        anchor.href = noteHref(note.id, href.slice(1));
+      } else if (/^(https?:|mailto:)/i.test(href)) {
+        anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; anchor.referrerPolicy = 'no-referrer';
+      } else {
+        const [path, heading = ''] = href.split('#');
+        const destination = resolveNote(path, state.index, note, true);
+        if (destination) anchor.href = noteHref(destination.id, heading);
+        else replaceUnavailable(anchor);
+      }
+    }
+    const headingCounts = new Map();
+    for (const heading of fragment.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
+      const text = heading.textContent.trim();
+      const count = headingCounts.get(text) || 0;
+      headingCounts.set(text, count + 1);
+      heading.id = 'section-' + encodeURIComponent(text) + (count ? '-' + count : '');
+      heading.dataset.heading = text;
+    }
+    return fragment;
+  }
+
+  function replaceUnavailable(anchor) {
+    const span = document.createElement('span');
+    span.className = 'unavailable-link'; span.title = '这篇笔记或附件未收录在随心中';
+    span.textContent = anchor.textContent; anchor.replaceWith(span);
+  }
+
+  function renderArticle(route = parseRoute(location.hash)) {
+    if (!state.data) return;
+    const notes = state.data.notes;
+    const note = route.id ? notes.find((item) => item.id === route.id) : notes[0];
+    $('article-navigation').replaceChildren();
+    $('article-body').replaceChildren();
+    $('article-date').textContent = '';
+    if (!note) {
+      state.activeId = '';
+      $('article-title').textContent = notes.length ? '这篇笔记未找到' : '还没有笔记';
+      const paragraph = document.createElement('p');
+      paragraph.textContent = notes.length ? '从目录中选择一篇笔记继续阅读。' : '下一次同步后，随心文件夹中的笔记会出现在这里。';
+      $('article-body').append(paragraph);
+      $('reading-progress').textContent = '';
+      document.title = '随心'; renderList(); return;
+    }
+    state.activeId = note.id;
+    $('article-title').textContent = note.title;
+    const updated = formatDate(note.updatedAt);
+    $('article-date').textContent = updated ? '更新于 ' + updated : '';
+    $('article-body').append(sanitizeMarkdown(note.markdown, note));
+    const position = notes.indexOf(note);
+    $('reading-progress').textContent = (position + 1) + ' / ' + notes.length;
+    for (const [entry, label] of [[notes[position - 1], '上一篇'], [notes[position + 1], '下一篇']]) {
+      if (!entry) continue;
+      const link = document.createElement('a'); link.href = noteHref(entry.id);
+      const small = document.createElement('small'); small.textContent = label;
+      const title = document.createElement('span'); title.textContent = entry.title;
+      link.append(small, title); $('article-navigation').append(link);
+    }
+    document.title = note.title + ' · 随心';
+    $('reading-status').textContent = '已打开 ' + note.title;
+    renderList(); setDrawer(false);
+    if (route.heading) {
+      let name = route.heading;
+      try { name = decodeURIComponent(name); } catch (_) { /* Keep literal names. */ }
+      const heading = Array.from($('article-body').querySelectorAll('[data-heading]')).find((element) =>
+        element.dataset.heading === name || element.dataset.heading.toLocaleLowerCase().replace(/\s+/g, '-') === name);
+      if (heading) { heading.scrollIntoView({ block: 'start' }); return; }
+    }
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    $('article').focus({ preventScroll: true });
+  }
+
+  function lock() {
+    state.unlockGeneration += 1;
+    state.busy = false;
+    $('unlock-button').disabled = false; $('password').disabled = false;
+    state.data = null; state.index = null; state.activeId = '';
+    setDrawer(false);
+    $('note-list').replaceChildren(); $('article-body').replaceChildren(); $('article-navigation').replaceChildren();
+    for (const id of ['article-title', 'article-date', 'reading-progress', 'site-updated', 'note-count', 'reading-status']) $(id).textContent = '';
+    $('search').value = ''; $('password').value = ''; $('password').type = 'password';
+    $('password-toggle').textContent = '显示'; $('password-toggle').setAttribute('aria-label', '显示密码'); $('password-toggle').setAttribute('aria-pressed', 'false');
+    $('app-shell').hidden = true; $('lock-screen').hidden = false; $('unlock-status').textContent = '';
+    document.title = '随心'; history.replaceState(null, '', location.pathname + location.search);
+    $('password').focus();
+  }
+
+  $('unlock-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (state.busy || !$('password').value) return;
+    if (!globalThis.crypto?.subtle) { $('unlock-status').textContent = '请使用新版浏览器，通过 HTTPS 打开网页。'; return; }
+    const generation = ++state.unlockGeneration;
+    const isCurrent = () => generation === state.unlockGeneration;
+    state.busy = true; $('unlock-button').disabled = true; $('password').disabled = true;
+    $('unlock-status').textContent = '正在解锁…';
+    let password = $('password').value;
+    try {
+      let envelope;
+      try {
+        const response = await fetch('./encrypted-notes.json', { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
+        if (!response.ok) throw new Error('Failed to load');
+        envelope = await response.json();
+      } catch (_) {
+        if (isCurrent()) $('unlock-status').textContent = '笔记暂时无法加载，请稍后再试。';
+        return;
+      }
+      if (!isCurrent()) return;
+      let data;
+      try { data = await decryptNotes(envelope, password); }
+      catch (_) {
+        if (isCurrent()) $('unlock-status').textContent = '未能解锁，请检查密码后重试。';
+        return;
+      }
+      // A completed old request must never reopen a page that was locked during decryption.
+      if (!isCurrent()) return;
+      state.data = data;
+      state.index = createNoteIndex(state.data.notes);
+      const updated = formatDate(state.data.updatedAt);
+      $('site-updated').textContent = updated ? '同步于 ' + updated : '';
+      $('lock-screen').hidden = true; $('app-shell').hidden = false; $('unlock-status').textContent = '';
+      $('sidebar').inert = mobile.matches;
+      renderArticle();
+    } finally {
+      password = '';
+      if (isCurrent()) {
+        $('password').value = ''; $('password').disabled = false;
+        $('password').type = 'password'; $('password-toggle').textContent = '显示'; $('password-toggle').setAttribute('aria-label', '显示密码');
+        $('password-toggle').setAttribute('aria-pressed', 'false'); $('unlock-button').disabled = false; state.busy = false;
+        if (!state.data) $('password').focus();
+      }
+    }
+  });
+
+  $('password-toggle').addEventListener('click', () => {
+    const show = $('password').type === 'password';
+    $('password').type = show ? 'text' : 'password';
+    $('password-toggle').textContent = show ? '隐藏' : '显示';
+    $('password-toggle').setAttribute('aria-label', show ? '隐藏密码' : '显示密码');
+    $('password-toggle').setAttribute('aria-pressed', String(show));
+  });
+  $('search').addEventListener('input', () => { if (state.data) renderList(); });
+  $('lock-button').addEventListener('click', lock); $('mobile-lock').addEventListener('click', lock);
+  $('menu-toggle').addEventListener('click', () => setDrawer(!state.drawerOpen));
+  $('drawer-close').addEventListener('click', () => setDrawer(false));
+  $('drawer-backdrop').addEventListener('click', () => setDrawer(false));
+  $('home-link').addEventListener('click', (event) => {
+    event.preventDefault();
+    if (state.data?.notes.length) location.hash = noteHref(state.data.notes[0].id);
+    setDrawer(false);
+  });
+  $('note-list').addEventListener('click', (event) => {
+    if (event.target.closest('a')) setDrawer(false);
+  });
+  window.addEventListener('hashchange', () => renderArticle());
+  mobile.addEventListener('change', () => { setDrawer(false); $('sidebar').inert = mobile.matches; });
+  document.addEventListener('keydown', (event) => {
+    if (!state.drawerOpen) return;
+    if (event.key === 'Escape') { event.preventDefault(); setDrawer(false); }
+    if (event.key === 'Tab') {
+      const elements = Array.from($('sidebar').querySelectorAll('a[href],button,input')).filter((element) => !element.disabled && element.getClientRects().length);
+      const first = elements[0], last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+  });
+  // BFCache must not restore a previously decrypted page after navigating away.
+  window.addEventListener('pagehide', lock);
+  $('sidebar').inert = mobile.matches;
+})();

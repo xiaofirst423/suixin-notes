@@ -59,34 +59,13 @@
     });
   }
 
-  function decodeBase64(value) {
-    if (typeof value !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) throw new Error('Invalid encrypted data');
-    return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
-  }
-
-  async function decryptNotes(envelope, password) {
-    if (!globalThis.crypto || !crypto.subtle) throw new Error('Secure browser required');
-    if (!envelope || envelope.version !== 1 || envelope.kdf?.name !== 'PBKDF2' || envelope.kdf.hash !== 'SHA-256' ||
-        envelope.kdf.iterations !== 600000 || envelope.cipher?.name !== 'AES-GCM' || envelope.cipher.tagLength !== 128) {
-      throw new Error('Invalid encrypted data');
-    }
-    const salt = decodeBase64(envelope.kdf.salt);
-    const iv = decodeBase64(envelope.cipher.iv);
-    const ciphertext = decodeBase64(envelope.ciphertext);
-    if (salt.length < 16 || iv.length !== 12 || ciphertext.length < 16) throw new Error('Invalid encrypted data');
-    const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
-    const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', iterations: 600000, salt }, material,
-      { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
-    const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, key, ciphertext);
-    const bytes = new Uint8Array(plaintext);
-    let data;
-    try { data = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
-    finally { bytes.fill(0); }
+  function validateNotes(data) {
     if (!data || !Array.isArray(data.notes)) throw new Error('Invalid notes data');
     const ids = new Set();
     for (const note of data.notes) {
-      if (!note || typeof note.id !== 'string' || !note.id || ids.has(note.id) || typeof note.title !== 'string' ||
-          typeof note.markdown !== 'string' || typeof note.path !== 'string') throw new Error('Invalid notes data');
+      if (!note || typeof note.id !== 'string' || !note.id || ids.has(note.id) ||
+          typeof note.title !== 'string' || typeof note.markdown !== 'string' ||
+          typeof note.path !== 'string') throw new Error('Invalid notes data');
       ids.add(note.id);
     }
     return data;
@@ -121,11 +100,11 @@
   }
 
   // Exposed only for local checks; no password or decrypted state is included.
-  globalThis.SuixinCore = { escapeHtml, normalizePath, createNoteIndex, resolveNote, noteHref, parseRoute, searchNotes, decryptNotes, createMarkdownParser };
+  globalThis.SuixinCore = { escapeHtml, normalizePath, createNoteIndex, resolveNote, noteHref, parseRoute, searchNotes, validateNotes, createMarkdownParser };
   if (typeof document === 'undefined') return;
 
   const $ = (id) => document.getElementById(id);
-  const state = { data: null, index: null, activeId: '', busy: false, drawerOpen: false, unlockGeneration: 0 };
+  const state = { data: null, index: null, activeId: '', busy: false, drawerOpen: false, loadGeneration: 0 };
   const dateFormatter = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Shanghai' });
   const mobile = window.matchMedia('(max-width: 760px)');
   let drawerReturnFocus = null;
@@ -254,76 +233,34 @@
     $('article').focus({ preventScroll: true });
   }
 
-  function lock() {
-    state.unlockGeneration += 1;
-    state.busy = false;
-    $('unlock-button').disabled = false; $('password').disabled = false;
-    state.data = null; state.index = null; state.activeId = '';
-    setDrawer(false);
-    $('note-list').replaceChildren(); $('article-body').replaceChildren(); $('article-navigation').replaceChildren();
-    for (const id of ['article-title', 'article-date', 'reading-progress', 'site-updated', 'note-count', 'reading-status']) $(id).textContent = '';
-    $('search').value = ''; $('password').value = ''; $('password').type = 'password';
-    $('password-toggle').textContent = '显示'; $('password-toggle').setAttribute('aria-label', '显示密码'); $('password-toggle').setAttribute('aria-pressed', 'false');
-    $('app-shell').hidden = true; $('lock-screen').hidden = false; $('unlock-status').textContent = '';
-    document.title = '随心'; history.replaceState(null, '', location.pathname + location.search);
-    $('password').focus();
-  }
-
-  $('unlock-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (state.busy || !$('password').value) return;
-    if (!globalThis.crypto?.subtle) { $('unlock-status').textContent = '请使用新版浏览器，通过 HTTPS 打开网页。'; return; }
-    const generation = ++state.unlockGeneration;
-    const isCurrent = () => generation === state.unlockGeneration;
-    state.busy = true; $('unlock-button').disabled = true; $('password').disabled = true;
-    $('unlock-status').textContent = '正在解锁…';
-    let password = $('password').value;
+  async function loadNotes() {
+    if (state.busy) return;
+    state.busy = true;
+    $('load-retry').hidden = true;
+    $('load-status').textContent = '正在加载笔记…';
     try {
-      let envelope;
-      try {
-        const response = await fetch('./encrypted-notes.json', { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
-        if (!response.ok) throw new Error('Failed to load');
-        envelope = await response.json();
-      } catch (_) {
-        if (isCurrent()) $('unlock-status').textContent = '笔记暂时无法加载，请稍后再试。';
-        return;
-      }
-      if (!isCurrent()) return;
-      let data;
-      try { data = await decryptNotes(envelope, password); }
-      catch (_) {
-        if (isCurrent()) $('unlock-status').textContent = '未能解锁，请检查密码后重试。';
-        return;
-      }
-      // A completed old request must never reopen a page that was locked during decryption.
-      if (!isCurrent()) return;
-      state.data = data;
+      const response = await fetch('./notes.json', { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
+      if (!response.ok) throw new Error('Notes unavailable');
+      state.data = validateNotes(await response.json());
       state.index = createNoteIndex(state.data.notes);
       const updated = formatDate(state.data.updatedAt);
       $('site-updated').textContent = updated ? '同步于 ' + updated : '';
-      $('lock-screen').hidden = true; $('app-shell').hidden = false; $('unlock-status').textContent = '';
+      $('load-screen').hidden = true;
+      $('app-shell').hidden = false;
       $('sidebar').inert = mobile.matches;
       renderArticle();
-    } finally {
-      password = '';
-      if (isCurrent()) {
-        $('password').value = ''; $('password').disabled = false;
-        $('password').type = 'password'; $('password-toggle').textContent = '显示'; $('password-toggle').setAttribute('aria-label', '显示密码');
-        $('password-toggle').setAttribute('aria-pressed', 'false'); $('unlock-button').disabled = false; state.busy = false;
-        if (!state.data) $('password').focus();
-      }
-    }
+    } catch (_) {
+      state.data = null;
+      $('load-status').textContent = '笔记暂时无法加载，请稍后重试。';
+      $('load-retry').hidden = false;
+    } finally { state.busy = false; }
+  }
+  $('load-retry').addEventListener('click', loadNotes);
+  $('mobile-home').addEventListener('click', () => {
+    if (state.data?.notes.length) location.hash = noteHref(state.data.notes[0].id);
   });
 
-  $('password-toggle').addEventListener('click', () => {
-    const show = $('password').type === 'password';
-    $('password').type = show ? 'text' : 'password';
-    $('password-toggle').textContent = show ? '隐藏' : '显示';
-    $('password-toggle').setAttribute('aria-label', show ? '隐藏密码' : '显示密码');
-    $('password-toggle').setAttribute('aria-pressed', String(show));
-  });
   $('search').addEventListener('input', () => { if (state.data) renderList(); });
-  $('lock-button').addEventListener('click', lock); $('mobile-lock').addEventListener('click', lock);
   $('menu-toggle').addEventListener('click', () => setDrawer(!state.drawerOpen));
   $('drawer-close').addEventListener('click', () => setDrawer(false));
   $('drawer-backdrop').addEventListener('click', () => setDrawer(false));
@@ -347,7 +284,6 @@
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }
   });
-  // BFCache must not restore a previously decrypted page after navigating away.
-  window.addEventListener('pagehide', lock);
   $('sidebar').inert = mobile.matches;
+  loadNotes();
 })();

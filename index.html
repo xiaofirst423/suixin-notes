@@ -14,23 +14,8 @@
   <script src="./assets/app.js" defer></script>
 </head>
 <body>
-  <section class="lock-screen" id="lock-screen" aria-labelledby="lock-title">
-    <div class="lock-card">
-      <p class="eyebrow">个人笔记</p>
-      <h1 id="lock-title">随心<span class="title-dot" aria-hidden="true">。</span></h1>
-      <p class="lock-intro">输入访问密码，打开笔记。</p>
-      <form id="unlock-form">
-        <label for="password">访问密码</label>
-        <div class="password-wrap">
-          <input id="password" name="password" type="password" autocomplete="current-password" spellcheck="false" required aria-describedby="unlock-status">
-          <button class="password-toggle" id="password-toggle" type="button" aria-label="显示密码" aria-pressed="false">显示</button>
-        </div>
-        <button class="unlock-button" id="unlock-button" type="submit">打开笔记 <span aria-hidden="true">↗</span></button>
-        <p class="unlock-status" id="unlock-status" role="status" aria-live="polite"></p>
-      </form>
-      <p class="lock-hint">密码仅在当前页面中用于解锁。</p>
-      <p class="password-reminder">密码和电脑解锁密码一致</p>
-    </div>
+  <section class="load-screen" id="load-screen" aria-label="加载笔记">
+    <div><p id="load-status" role="status">正在加载笔记…</p><button class="text-button" id="load-retry" type="button" hidden>重新加载</button></div>
   </section>
 
   <div class="app-shell" id="app-shell" hidden>
@@ -38,7 +23,7 @@
     <header class="mobile-header">
       <button class="icon-button" id="menu-toggle" type="button" aria-label="打开笔记目录" aria-controls="sidebar" aria-expanded="false"><span aria-hidden="true">☰</span></button>
       <span class="mobile-brand">随心</span>
-      <button class="text-button" id="mobile-lock" type="button">锁定</button>
+      <button class="text-button" id="mobile-home" type="button">首页</button>
     </header>
     <button class="drawer-backdrop" id="drawer-backdrop" type="button" tabindex="-1" aria-label="关闭目录" hidden></button>
     <aside class="sidebar" id="sidebar" aria-label="笔记目录">
@@ -54,7 +39,7 @@
       <div class="list-heading"><span>所有笔记</span><span id="note-count"></span></div>
       <nav class="note-list" id="note-list" aria-label="笔记"></nav>
       <p class="search-empty" id="search-empty" hidden>没有找到相关笔记。<br>试试另一个关键词。</p>
-      <footer class="sidebar-footer"><span id="site-updated"></span><button class="text-button" id="lock-button" type="button">锁定</button></footer>
+      <footer class="sidebar-footer"><span id="site-updated"></span></footer>
     </aside>
     <main class="reading-pane" id="reading-pane">
       <div class="reading-topline"><span>随心 / 笔记</span><span id="reading-progress"></span></div>
@@ -66,6 +51,6 @@
       <p class="reading-status sr-only" id="reading-status" role="status" aria-live="polite"></p>
     </main>
   </div>
-  <noscript><p class="noscript-message">请启用浏览器的 JavaScript，以解锁和阅读笔记。</p></noscript>
+  <noscript><p class="noscript-message">请启用浏览器的 JavaScript，以阅读笔记。</p></noscript>
 </body>
 </html>

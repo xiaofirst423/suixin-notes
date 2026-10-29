@@ -3,124 +3,77 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
-  <meta name="theme-color" content="#f7f8fa">
-  <meta name="description" content="随心，一处安静的文字角落。记录片刻、故事，以及思绪经过的痕迹。">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#121310">
+  <meta name="description" content="随心，一座关于片刻的私人文字展馆。一篇文字，一处停留。">
   <meta name="robots" content="noindex,nofollow,noarchive">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'none'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-src 'none'">
-  <title>随心</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-src 'none'">
+  <title>随心 · 私人文字展馆</title>
   <link rel="stylesheet" href="./assets/styles.css">
   <script src="./assets/vendor/marked.umd.js" defer></script>
   <script src="./assets/vendor/purify.min.js" defer></script>
+  <script src="./assets/core.js" defer></script>
   <script src="./assets/app.js" defer></script>
-  <script src="./assets/particles.js" defer></script>
   <script src="./assets/interactions.js" defer></script>
 </head>
-<body>
-  <a class="skip-link landing-skip" href="#notes">跳到随笔</a>
-  <section class="load-screen" id="load-screen" aria-label="加载笔记">
-    <div><p id="load-status" role="status">正在加载笔记…</p><button class="text-button" id="load-retry" type="button" hidden>重新加载</button></div>
-  </section>
-
-  <div class="app-shell landing-view" id="app-shell" hidden>
-    <div class="landing" id="landing">
-      <div class="ambient-field" id="ambient-field" aria-hidden="true"></div>
-      <header class="site-header">
-        <a class="site-brand" href="#" aria-label="随心首页"><span class="brand-mark" aria-hidden="true"></span>随心</a>
-        <nav class="site-nav" aria-label="主导航">
-          <a href="#notes">随笔</a>
-          <a href="#about">关于</a>
-        </nav>
-        <a class="nav-read magnetic" id="nav-read" href="#notes">开始阅读<span aria-hidden="true">↗</span></a>
-      </header>
-      <main>
-        <section class="hero" aria-labelledby="hero-title">
-          <div class="hero-orbit" aria-hidden="true"><span></span><span></span><span></span></div>
-          <div class="hero-content">
-            <p class="eyebrow entrance">A QUIET PLACE FOR LOUD THOUGHTS</p>
-            <h1 id="hero-title" class="entrance">随心，记录<br><span>思绪的形状。</span></h1>
-            <p class="hero-intro entrance">一些片刻，一些故事。<br>在匆匆经过的世界里，留下自己的回声。</p>
-            <div class="hero-actions entrance">
-              <a class="button button-primary magnetic" id="latest-note" href="#notes">读最新一篇<span aria-hidden="true">↗</span></a>
-              <a class="button button-secondary magnetic" href="#notes">浏览随笔<span aria-hidden="true">↓</span></a>
-            </div>
-          </div>
-          <div class="hero-caption entrance"><span>日常有迹，思绪有形</span><span>EST. 2026</span></div>
-          <a class="scroll-cue" href="#notes" aria-label="向下浏览随笔"><span></span>向下，慢慢翻阅</a>
-        </section>
-        <section class="notes-section" id="notes" aria-labelledby="notes-title">
-          <div class="section-heading reveal">
-            <p class="eyebrow">RECENT FRAGMENTS · 近期随笔</p>
-            <h2 id="notes-title">思绪经过，<br>文字留下。</h2>
-            <p>不必等到想法完整，才把它写下。<br>每一个不完美的此刻，都值得被认真收藏。</p>
-          </div>
-          <div class="archive-toolbar reveal">
-            <p class="archive-info" id="archive-info" role="status" aria-live="polite">正在整理文字</p>
-            <div class="archive-search">
-              <label class="sr-only" for="archive-search">搜索随笔标题和正文</label>
-              <input id="archive-search" type="search" placeholder="寻找一段文字…" autocomplete="off" spellcheck="false" aria-keyshortcuts="/" aria-controls="story-list">
-              <kbd aria-hidden="true">/</kbd>
-            </div>
-          </div>
-          <div class="story-list" id="story-list"><p class="story-empty">正在整理随笔…</p></div>
-          <button class="text-link reveal" id="all-notes" type="button" aria-expanded="false" aria-controls="story-list" hidden>查看全部随笔<span aria-hidden="true">↓</span></button>
-        </section>
-        <section class="about-section" id="about" aria-labelledby="about-title">
-          <div class="about-intro reveal">
-            <p class="eyebrow">A PERSONAL ARCHIVE</p>
-            <h2 id="about-title">不为抵达哪里，<br>只为记住来过。</h2>
-          </div>
-          <div class="principles">
-            <article class="principle reveal"><span>01</span><h3>写下此刻</h3><p>记录稍纵即逝的感受，也收藏平凡日常里细小的光。</p></article>
-            <article class="principle reveal"><span>02</span><h3>循着痕迹</h3><p>用标题或只言片语，重新找到那些曾经触动自己的瞬间。</p></article>
-            <article class="principle reveal"><span>03</span><h3>慢慢重读</h3><p>没有喧嚣的信息流，只有一段安静、专注的阅读时光。</p></article>
-          </div>
-        </section>
-        <section class="closing-section reveal" aria-label="开始阅读">
-          <p class="eyebrow">MAKE YOURSELF AT HOME</p>
-          <h2>从这里，<br>走进我的故事。</h2>
-          <a class="button button-primary magnetic" id="closing-read" href="#notes">翻开随心<span aria-hidden="true">↗</span></a>
-        </section>
-      </main>
-      <footer class="site-footer"><a class="site-brand" href="#">随心<span class="brand-mark" aria-hidden="true"></span></a><p>把日子写成故事，把故事留给自己。</p><span>© 2026 SUIXIN</span></footer>
-    </div>
-    <div class="reading-view" id="reading-view" hidden>
-    <a class="skip-link" href="#article">跳到正文</a>
-    <header class="mobile-header">
-      <button class="icon-button" id="menu-toggle" type="button" aria-label="打开笔记目录" aria-controls="sidebar" aria-expanded="false"><span aria-hidden="true">☰</span></button>
-      <span class="mobile-brand">随心</span>
-      <button class="text-button" id="mobile-home" type="button">首页</button>
-    </header>
-    <button class="drawer-backdrop" id="drawer-backdrop" type="button" tabindex="-1" aria-label="关闭目录" hidden></button>
-    <aside class="sidebar" id="sidebar" aria-label="笔记目录">
-      <div class="sidebar-brand">
-        <a href="#" id="home-link" class="brand">随心<span aria-hidden="true">。</span></a>
-        <button class="drawer-close icon-button" id="drawer-close" type="button" aria-label="关闭笔记目录">×</button>
-      </div>
-      <div class="search-wrap">
-        <span class="search-icon" aria-hidden="true">⌕</span>
-        <label class="sr-only" for="search">搜索笔记标题和正文</label>
-        <input id="search" type="search" placeholder="搜索笔记" autocomplete="off" spellcheck="false" aria-keyshortcuts="/" aria-controls="note-list">
-      </div>
-      <div class="list-heading"><span>所有笔记</span><span id="note-count" role="status" aria-live="polite"></span></div>
-      <nav class="note-list" id="note-list" aria-label="笔记"></nav>
-      <p class="search-empty" id="search-empty" hidden>没有找到相关笔记。<br>试试另一个关键词。</p>
-      <footer class="sidebar-footer"><span id="site-updated"></span></footer>
-    </aside>
-    <main class="reading-pane" id="reading-pane">
-      <div class="reading-track" aria-hidden="true"><span id="reading-track-fill"></span></div>
-      <div class="reading-topline"><a href="#" aria-label="返回随心首页">随心 <span aria-hidden="true">/</span> 笔记</a><span id="reading-progress"></span></div>
-      <article class="article" id="article" tabindex="-1" aria-labelledby="article-title">
-        <header class="article-header"><p class="article-date"><span id="article-date"></span><span id="reading-time"></span></p><h1 id="article-title"></h1></header>
-        <div class="markdown-body" id="article-body"></div>
-      </article>
-      <nav class="article-navigation" id="article-navigation" aria-label="前后笔记"></nav>
-      <p class="reading-status sr-only" id="reading-status" role="status" aria-live="polite"></p>
-    </main>
-    <button class="back-to-top" id="back-to-top" type="button" hidden>回到顶部 <span aria-hidden="true">↑</span></button>
-    </div>
+<body data-view="gallery">
+  <a class="skip-link" id="skip-link" href="#chapter-title">跳到主要内容</a>
+  <div class="scene-atmosphere" id="scene-atmosphere" aria-hidden="true">
+    <picture id="scene-picture"><source id="scene-source" media="(max-width: 760px)" srcset="./assets/gallery/door-small.webp"><img id="scene-image" src="./assets/gallery/door.webp" alt="" width="1536" height="1024" fetchpriority="high"></picture>
+    <div class="scene-shade"></div>
   </div>
-  <noscript><p class="noscript-message">请启用浏览器的 JavaScript，以阅读笔记。</p></noscript>
+  <header class="site-header">
+    <a class="site-brand" href="#" aria-label="随心，回到入口"><span class="brand-name">随心<span class="brand-period">。</span></span><span class="brand-caption">A PRIVATE COLLECTION</span></a>
+    <span class="header-note">文字有光，片刻有形。</span>
+    <a class="header-index" id="header-index" href="#index">作品索引 <span aria-hidden="true">↗</span></a>
+  </header>
+  <main class="gallery-view" id="gallery-view" aria-label="文字展馆">
+    <section class="chapter entrance-chapter" id="chapter" aria-labelledby="chapter-title">
+      <div class="chapter-copy" id="chapter-copy">
+        <p class="eyebrow" id="chapter-label">SUIXIN · 私人文字展馆</p>
+        <h1 class="chapter-title" id="chapter-title" tabindex="-1">随心</h1>
+        <p class="chapter-subtitle" id="chapter-subtitle">给片刻，一个停留的地方。</p>
+        <p class="chapter-description" id="chapter-description">一些片刻，一些故事。<br>在这里，慢慢看，轻轻读。</p>
+        <p class="chapter-date" id="chapter-date" hidden></p>
+        <div class="chapter-actions">
+          <a class="primary-action" id="chapter-open" href="#index">进入展馆 <span aria-hidden="true">↗</span></a>
+          <a class="quiet-action" id="chapter-index" href="#index">作品索引</a>
+        </div>
+        <div class="load-feedback" id="load-feedback"><span id="load-status" role="status">正在整理文字…</span><button class="text-button" id="load-retry" type="button" hidden>重新加载</button></div>
+      </div>
+      <div class="scene-caption" aria-hidden="true"><span id="scene-caption-label">THE QUIET HOURS</span><span id="scene-caption-copy">此刻，留一盏灯。</span></div>
+    </section>
+    <nav class="chapter-controls" aria-label="展览章节">
+      <button class="chapter-nav" id="chapter-prev" type="button" disabled><span aria-hidden="true">←</span><span>上一幕</span></button>
+      <div class="chapter-position"><span class="position-label" id="position-label">序 · 入馆</span><span class="position-number"><span id="chapter-current">00</span><span class="position-divider" aria-hidden="true"></span><span id="chapter-total">—</span></span></div>
+      <button class="chapter-nav" id="chapter-next" type="button"><span id="chapter-next-label">开始看展</span><span aria-hidden="true">→</span></button>
+    </nav>
+  </main>
+  <main class="index-view" id="index-view" hidden aria-labelledby="index-title">
+    <div class="index-intro"><div><p class="eyebrow">THE COLLECTION / 作品索引</p><h1 id="index-title" tabindex="-1">文字的收藏</h1></div><p class="index-intro-note">每一篇，都是曾经停留的片刻。<br><span id="collection-meta"></span></p></div>
+    <div class="index-toolbar">
+      <div class="index-search"><label class="sr-only" for="search">搜索随笔标题和正文</label><span class="search-label" aria-hidden="true">寻找</span><input id="search" type="search" placeholder="一个标题，或一句记得的话…" autocomplete="off" spellcheck="false" aria-keyshortcuts="/" aria-controls="note-list"><button id="clear-search" class="text-button" type="button" hidden>清空</button><kbd aria-hidden="true">/</kbd></div>
+      <p class="result-count" id="result-count" role="status" aria-live="polite"></p>
+    </div>
+    <ol class="note-list" id="note-list"></ol>
+    <div class="empty-state" id="search-empty" hidden><p>暂时没有找到这段文字。</p><button id="empty-clear" class="quiet-action" type="button">清空搜索，看看全部</button></div>
+    <footer class="index-footer"><a class="quiet-action" id="index-return" href="#">← 返回展馆</a><span>慢慢来，文字一直在这里。</span></footer>
+  </main>
+  <main class="reading-view" id="reading-view" hidden aria-labelledby="article-title">
+    <div class="reading-track" aria-hidden="true"><span id="reading-track-fill"></span></div>
+    <nav class="reader-toolbar" aria-label="阅读导航"><a class="quiet-action" id="reader-back" href="#">← 回到展馆</a><span id="reading-position"></span></nav>
+    <article class="article" id="article" tabindex="-1" aria-labelledby="article-title">
+      <header class="article-header"><p class="eyebrow">A MOMENT, IN WORDS</p><h1 id="article-title"></h1><p class="article-meta"><span id="article-date"></span><span id="reading-time"></span></p></header>
+      <div class="markdown-body" id="article-body"></div>
+    </article>
+    <div class="reading-end"><span>·</span><p>文字到这里，思绪还在。</p></div>
+    <nav class="article-navigation" id="article-navigation" aria-label="前后篇"></nav>
+    <footer class="reader-footer"><a class="quiet-action" id="reader-return" href="#">← 回到展馆</a><span>随心 · 私人文字展馆</span></footer>
+    <button class="back-to-top text-button" id="back-to-top" type="button" hidden>回到顶部 ↑</button>
+  </main>
+  <main class="message-view" id="message-view" hidden aria-labelledby="message-title"><p class="eyebrow">SUIXIN / 随心</p><h1 id="message-title" tabindex="-1"></h1><p id="message-copy"></p><button class="primary-action" id="message-retry" type="button" hidden>重新加载</button><a class="quiet-action" id="message-index" href="#index">查看作品索引 ↗</a><a class="quiet-action" href="#">回到入口</a></main>
+  <p class="sr-only" id="navigation-status" role="status" aria-live="polite"></p>
+  <noscript><p class="noscript-message">请启用浏览器的 JavaScript，以浏览展馆和阅读文字。</p></noscript>
 </body>
 </html>

@@ -1,421 +1,319 @@
 (function () {
   'use strict';
+  const { parseRoute, sortNotes, validateNotes, createNoteIndex, searchNotes, noteHref, exhibitHref, sceneVariant, excerptText, sanitizeMarkdown } = globalThis.SuixinCore;
+  const $ = id => document.getElementById(id);
+  const dateFormatter = new Intl.DateTimeFormat('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Asia/Shanghai'});
+  const initial = history.state && history.state.suixin && history.state.hash === location.hash ? history.state : {};
+  const state = { data:null, notes:[], index:null, loading:false, failed:false, hash:location.hash,
+    query:initial.query || '', galleryHash:initial.galleryHash || (parseRoute(location.hash).kind === 'reading' ? exhibitHref(parseRoute(location.hash).id) : '#'),
+    readerOrigin:initial.readerOrigin || null, position:0, version:0, progressFrame:0 };
+  history.scrollRestoration = 'manual';
 
-  function escapeHtml(value) {
-    return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  function dateText(value) {
+    const date = new Date(value);
+    return value && Number.isFinite(date.getTime()) ? dateFormatter.format(date) : '';
   }
-
-  function normalizePath(value) {
-    let path = String(value || '').replace(/\\/g, '/').trim();
-    try { path = decodeURIComponent(path); } catch (_) { /* Literal malformed percent signs are valid filenames. */ }
-    return path.replace(/^\.\//, '').replace(/\.md$/i, '').normalize('NFC');
+  function number(value) { return String(value).padStart(2,'0'); }
+  function setLink(element, href, label, arrow) {
+    element.href = href;
+    element.replaceChildren(document.createTextNode(label));
+    if (arrow) { const span = document.createElement('span'); span.setAttribute('aria-hidden','true'); span.textContent = arrow; element.append(span); }
   }
-
-  function createNoteIndex(notes) {
-    const byPath = new Map();
-    const byName = new Map();
-    notes.forEach((note) => {
-      const path = normalizePath(note.path || note.title);
-      byPath.set(path, note);
-      const name = path.split('/').pop();
-      if (!byName.has(name)) byName.set(name, note);
-      else byName.set(name, null); // A repeated basename is not a unique link target.
-    });
-    return { byPath, byName };
+  function historyEntry(extra = {}) {
+    return {suixin:true,hash:location.hash,query:state.query,galleryHash:state.galleryHash,readerOrigin:state.readerOrigin,
+      scroll:scrollY,focusId:document.activeElement?.id || '',...extra};
   }
-
-  function resolveNote(target, index, currentNote, relative = false) {
-    const path = normalizePath(target).replace(/^随心\//, '');
-    if (!path || path.startsWith('/') || /^[a-z]+:/i.test(path)) return null;
-    if (!path.includes('/')) return index.byPath.get(path) || index.byName.get(path) || null;
-    if (relative && currentNote) {
-      const parts = normalizePath(currentNote.path || currentNote.title).split('/').slice(0, -1);
-      for (const part of path.split('/')) {
-        if (part === '..') { if (!parts.length) return null; parts.pop(); }
-        else if (part !== '.' && part) parts.push(part);
-      }
-      return index.byPath.get(parts.join('/')) || null;
+  function savePosition() { history.replaceState(historyEntry(),'',location.href); }
+  function galleryHref(position) {
+    if (position <= 0) return '#';
+    if (position > state.notes.length) return '#end';
+    return exhibitHref(state.notes[position - 1].id);
+  }
+  function originForReading(route) {
+    const from = parseRoute(location.hash);
+    if (from.kind === 'reading') return state.readerOrigin || {hash:exhibitHref(route.id),scroll:0,focusId:'chapter-open'};
+    if (from.kind === 'index') return {hash:'#index',query:state.query,scroll:scrollY,focusId:'index-note-' + route.id};
+    if (['entrance','exhibit','end'].includes(from.kind)) return {hash:location.hash || '#',scroll:scrollY,focusId:'chapter-open'};
+    return {hash:exhibitHref(route.id),scroll:0,focusId:'chapter-open'};
+  }
+  function navigate(hash, options = {}) {
+    if (hash === location.hash || (hash === '#' && !location.hash)) {
+      if (options.search) $('search').focus();
+      return;
     }
-    if (path.split('/').some((part) => part === '..' || part === '.')) return null;
-    return index.byPath.get(path) || null;
+    const route = parseRoute(hash);
+    const origin = route.kind === 'reading' ? originForReading(route) : null;
+    savePosition();
+    if (route.kind === 'reading') state.readerOrigin = origin;
+    const restored = options.restore || {};
+    if (typeof restored.query === 'string') state.query = restored.query;
+    history.pushState(historyEntry({hash,scroll:restored.scroll || 0,focusId:restored.focusId || '',...restored}),'',hash);
+    render({restore:options.restore,search:options.search});
   }
-
-  function noteHref(id, heading = '') {
-    const route = new URLSearchParams({ note: id });
-    if (heading) route.set('heading', heading);
-    return '#' + route.toString();
+  function returnFromReading() {
+    const route = parseRoute(location.hash);
+    const origin = state.readerOrigin || {hash:exhibitHref(route.id),scroll:0,focusId:'chapter-open'};
+    navigate(origin.hash,{restore:origin});
   }
-
-  function parseRoute(hash) {
-    const route = new URLSearchParams(String(hash || '').replace(/^#/, ''));
-    return { id: route.get('note') || '', heading: route.get('heading') || '' };
+  function view(kind) {
+    document.body.dataset.view = kind;
+    $('gallery-view').hidden = kind !== 'gallery';
+    $('index-view').hidden = kind !== 'index';
+    $('reading-view').hidden = kind !== 'reading';
+    $('message-view').hidden = kind !== 'message';
+    $('scene-atmosphere').hidden = kind !== 'gallery';
+    $('back-to-top').hidden = true;
+    const destinations = {gallery:'#chapter-title',index:'#index-title',reading:'#article',message:'#message-title'};
+    $('skip-link').href = destinations[kind];
+    if (kind === 'index') setLink($('header-index'),state.galleryHash,'返回展馆','↗');
+    else setLink($('header-index'),'#index','作品索引','↗');
   }
-
-  function searchNotes(notes, query) {
-    const words = String(query).normalize('NFKC').toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
-    return notes.filter((note) => {
-      const haystack = (note.title + '\n' + note.markdown).normalize('NFKC').toLocaleLowerCase();
-      return words.every((word) => haystack.includes(word));
-    });
+  function setArt(name) {
+    const target = './assets/gallery/' + name + '.webp';
+    if ($('scene-image').getAttribute('src') === target) return;
+    $('scene-atmosphere').classList.remove('asset-missing');
+    $('scene-source').srcset = './assets/gallery/' + name + '-small.webp';
+    $('scene-image').src = target;
   }
+  $('scene-image').addEventListener('error',() => $('scene-atmosphere').classList.add('asset-missing'));
+  $('scene-image').addEventListener('load',() => $('scene-atmosphere').classList.remove('asset-missing'));
 
-  function validateNotes(data) {
-    if (!data || !Array.isArray(data.notes)) throw new Error('Invalid notes data');
-    const ids = new Set();
-    for (const note of data.notes) {
-      if (!note || typeof note.id !== 'string' || !note.id || ids.has(note.id) ||
-          typeof note.title !== 'string' || typeof note.markdown !== 'string' ||
-          typeof note.path !== 'string') throw new Error('Invalid notes data');
-      ids.add(note.id);
-    }
-    return data;
-  }
-
-  function createMarkdownParser(index, currentNote) {
-    const parser = new marked.Marked({ gfm: true, breaks: true });
-    parser.use({
-      extensions: [{
-        name: 'wikilink', level: 'inline',
-        start(source) { const offset = source.search(/!?\[\[/); return offset < 0 ? undefined : offset; },
-        tokenizer(source) {
-          const match = /^(!?)\[\[([^\]\n]+)\]\]/.exec(source);
-          if (!match) return undefined;
-          const [target, ...alias] = match[2].split('|');
-          const [path, ...heading] = target.split('#');
-          return { type: 'wikilink', raw: match[0], embed: !!match[1], target: path.trim(), heading: heading.join('#').trim(),
-            text: alias.join('|').trim() || normalizePath(path).split('/').pop() || heading.join('#') };
-        },
-        renderer(token) {
-          if (token.embed) return '<span class="attachment-note">' + escapeHtml(token.text) + '（附件未同步）</span>';
-          const note = token.target ? resolveNote(token.target, index, currentNote) : currentNote;
-          if (!note) return '<span class="unavailable-link" title="这篇笔记未收录在随心中">' + escapeHtml(token.text) + '</span>';
-          return '<a href="' + escapeHtml(noteHref(note.id, token.heading)) + '">' + escapeHtml(token.text) + '</a>';
-        }
-      }],
-      renderer: {
-        image({ text }) { return '<span class="attachment-note">' + escapeHtml(text || '图片') + '（附件未同步）</span>'; }
-      }
-    });
-    return parser;
-  }
-
-  // Exposed only for local checks; no password or decrypted state is included.
-  globalThis.SuixinCore = { escapeHtml, normalizePath, createNoteIndex, resolveNote, noteHref, parseRoute, searchNotes, validateNotes, createMarkdownParser };
-  if (typeof document === 'undefined') return;
-
-  const $ = (id) => document.getElementById(id);
-  const state = { data: null, index: null, activeId: '', busy: false, drawerOpen: false, archiveExpanded: false };
-  const dateFormatter = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Shanghai' });
-  const mobile = window.matchMedia('(max-width: 760px)');
-  let drawerReturnFocus = null;
-
-  function formatDate(value) {
-    const date = value ? new Date(value) : null;
-    return date && Number.isFinite(date.getTime()) ? dateFormatter.format(date) : '';
-  }
-
-  function setDrawer(open) {
-    if (open && !mobile.matches) return;
-    state.drawerOpen = open;
-    document.body.classList.toggle('drawer-open', open);
-    $('drawer-backdrop').hidden = !open;
-    $('menu-toggle').setAttribute('aria-expanded', String(open));
-    $('sidebar').inert = mobile.matches && !open;
-    $('reading-pane').inert = open;
-    if (open) { drawerReturnFocus = document.activeElement; $('drawer-close').focus(); }
-    else if (drawerReturnFocus) { drawerReturnFocus.focus(); drawerReturnFocus = null; }
+  function renderChapter(route) {
+    const n = state.notes.length;
+    let position = route.kind === 'end' ? n + 1 : route.kind === 'exhibit' ? state.notes.findIndex(note => note.id === route.id) + 1 : 0;
+    if (route.kind === 'exhibit' && !position) return renderMessage('这件展品暂未收录','它可能已被移动或移除。可以从作品索引继续浏览。');
+    view('gallery');
+    state.position = position;
+    state.galleryHash = location.hash || '#';
+    const entrance = position === 0, ending = route.kind === 'end';
+    const note = !entrance && !ending ? state.notes[position - 1] : null;
+    const variant = note ? sceneVariant(note.id) : 0;
+    $('chapter').className = 'chapter' + (entrance ? ' entrance-chapter' : ending ? ' ending-chapter' : ' exhibit-chapter');
+    $('chapter').dataset.variant = String(variant);
+    setArt(note ? ['door','wall','paper'][variant] : ending ? 'paper' : 'door');
+    $('chapter-title').textContent = entrance ? '随心' : ending ? '灯还亮着，\n下次再来。' : note.title;
+    $('chapter-label').textContent = entrance ? 'SUIXIN · 私人文字展馆' : ending ? 'UNTIL NEXT TIME / 尾声' : 'COLLECTION ' + number(position) + ' / 文字收藏';
+    $('chapter-subtitle').hidden = !entrance;
+    $('chapter-subtitle').textContent = '给片刻，一个停留的地方。';
+    $('chapter-description').textContent = entrance ? '一些片刻，一些故事。\n在这里，慢慢看，轻轻读。' : ending ? '把日子写成故事，把故事留给自己。\n谢谢你，在这些文字里停留。' : excerptText(note);
+    $('chapter-description').hidden = !!note && !excerptText(note);
+    const updated = note ? dateText(note.updatedAt) : '';
+    $('chapter-date').hidden = !updated;
+    $('chapter-date').textContent = updated ? '最近更新 ' + updated : '';
+    setLink($('chapter-open'), note ? noteHref(note.id) : ending ? '#' : n ? exhibitHref(state.notes[0].id) : '#index',
+      note ? '阅读全文' : ending ? '重新逛展' : n || !state.data ? '进入展馆' : '作品索引','↗');
+    $('chapter-index').hidden = !!note;
+    $('chapter-index').textContent = ending ? '查看全部作品' : '作品索引';
+    $('chapter-prev').disabled = entrance;
+    $('chapter-next').disabled = ending || !n;
+    $('chapter-next-label').textContent = entrance ? '开始看展' : position === n ? '走向尾声' : '下一幕';
+    $('chapter-current').textContent = ending ? '终' : number(position);
+    $('chapter-total').textContent = state.data ? number(n) : '—';
+    $('position-label').textContent = entrance ? '序 · 入馆' : ending ? '尾声 · 再会' : '一篇文字，一处停留';
+    $('scene-caption-label').textContent = entrance ? 'THE QUIET HOURS' : ending ? 'THE LIGHT STAYS ON' : 'A MOMENT, IN WORDS';
+    $('scene-caption-copy').textContent = entrance ? '此刻，留一盏灯。' : ending ? '文字一直在这里。' : '把目光，留给文字。';
+    $('load-feedback').hidden = !entrance || (!!state.data && n > 0);
+    $('load-status').textContent = state.loading ? '正在整理文字…' : state.failed ? '文字暂时无法加载。' : !n ? '第一篇文字，正在来的路上。' : '';
+    $('load-retry').hidden = !state.failed;
+    document.title = note ? note.title + ' · 随心展馆' : ending ? '尾声 · 随心' : '随心 · 私人文字展馆';
+    return 'chapter-title';
   }
 
   function renderList() {
-    const notes = searchNotes(state.data.notes, $('search').value);
-    $('note-count').textContent = notes.length + ' 篇';
-    $('search-empty').hidden = notes.length > 0;
+    const notes = searchNotes(state.notes,state.query);
+    $('search').value = state.query;
+    $('clear-search').hidden = !state.query;
+    $('result-count').textContent = state.query.trim() ? '找到 ' + notes.length + ' 篇文字' : '共 ' + notes.length + ' 篇 · 最近更新排序';
     $('note-list').replaceChildren();
+    $('search-empty').hidden = notes.length > 0;
+    $('search-empty').querySelector('p').textContent = state.notes.length ? '暂时没有找到这段文字。' : '第一篇文字，正在来的路上。';
+    $('empty-clear').hidden = !state.query;
+    const fragment = document.createDocumentFragment();
     for (const note of notes) {
-      const link = document.createElement('a');
-      link.className = 'note-link';
-      link.href = noteHref(note.id);
-      if (note.id === state.activeId) link.setAttribute('aria-current', 'page');
-      const title = document.createElement('span');
-      title.className = 'note-link-title'; title.textContent = note.title;
-      const excerpt = document.createElement('span');
-      excerpt.className = 'note-link-excerpt'; excerpt.textContent = note.excerpt || '';
-      link.append(title, excerpt); $('note-list').append(link);
+      const item = document.createElement('li');
+      const link = document.createElement('a'); link.className = 'note-row'; link.id = 'index-note-' + note.id; link.href = noteHref(note.id);
+      const num = document.createElement('span'); num.className = 'note-number'; num.textContent = number(state.notes.indexOf(note) + 1); num.setAttribute('aria-hidden','true');
+      const copy = document.createElement('span'); copy.className = 'note-copy';
+      const title = document.createElement('span'); title.className = 'note-title'; title.textContent = note.title;
+      const excerpt = document.createElement('span'); excerpt.className = 'note-excerpt'; excerpt.textContent = note.excerpt || '';
+      copy.append(title,excerpt);
+      const date = document.createElement('time'); date.className = 'note-date'; date.textContent = dateText(note.updatedAt);
+      if (date.textContent) { date.dateTime = new Date(note.updatedAt).toISOString(); date.setAttribute('aria-label','最近更新 ' + date.textContent); }
+      const arrow = document.createElement('span'); arrow.className = 'note-arrow'; arrow.textContent = '↗'; arrow.setAttribute('aria-hidden','true');
+      link.append(num,copy,date,arrow); item.append(link); fragment.append(item);
     }
+    $('note-list').append(fragment);
   }
-
-  function renderLanding() {
-    const allNotes = state.data.notes;
-    const query = $('archive-search').value.trim();
-    const notes = searchNotes(allNotes, query);
-    const first = allNotes[0];
-    const destination = first ? noteHref(first.id) : '#notes';
-    for (const id of ['nav-read', 'latest-note', 'closing-read']) $(id).href = destination;
-    $('archive-info').textContent = query ? '找到 ' + notes.length + ' 篇随笔' : '共 ' + allNotes.length + ' 篇随笔 · 持续记录中';
-    const expand = $('all-notes');
-    expand.hidden = !!query || notes.length <= 3;
-    expand.setAttribute('aria-expanded', String(state.archiveExpanded));
-    expand.replaceChildren(document.createTextNode(state.archiveExpanded ? '收起随笔' : '展开全部 ' + notes.length + ' 篇随笔'));
-    const expandArrow = document.createElement('span');
-    expandArrow.setAttribute('aria-hidden', 'true');
-    expandArrow.textContent = state.archiveExpanded ? '↑' : '↓';
-    expand.append(expandArrow);
-    $('story-list').replaceChildren();
-    if (!notes.length) {
-      const empty = document.createElement('p');
-      empty.className = 'story-empty';
-      empty.textContent = query ? '暂时没有找到，换个关键词试试。' : '第一篇随笔，正在来的路上。';
-      $('story-list').append(empty);
-      return;
-    }
-    const visibleNotes = query || state.archiveExpanded ? notes : notes.slice(0, 3);
-    visibleNotes.forEach((note) => {
-      const link = document.createElement('a');
-      link.className = 'story-link';
-      link.href = noteHref(note.id);
-      const number = document.createElement('span');
-      number.className = 'story-number';
-      number.setAttribute('aria-hidden', 'true');
-      number.textContent = String(allNotes.indexOf(note) + 1).padStart(2, '0');
-      const copy = document.createElement('span');
-      copy.className = 'story-copy';
-      const title = document.createElement('span');
-      title.className = 'story-title';
-      title.textContent = note.title;
-      copy.append(title);
-      if (note.excerpt) {
-        const excerpt = document.createElement('span');
-        excerpt.className = 'story-excerpt';
-        excerpt.textContent = note.excerpt;
-        copy.append(excerpt);
-      }
-      const date = document.createElement('time');
-      date.className = 'story-date';
-      date.textContent = formatDate(note.updatedAt);
-      if (date.textContent) date.dateTime = new Date(note.updatedAt).toISOString();
-      const arrow = document.createElement('span');
-      arrow.className = 'story-arrow';
-      arrow.setAttribute('aria-hidden', 'true');
-      arrow.textContent = '↗';
-      link.append(number, copy, date, arrow);
-      $('story-list').append(link);
-    });
+  function renderIndex() {
+    view('index');
+    renderList();
+    $('collection-meta').textContent = state.notes.length + ' 篇文字 · 持续记录中';
+    $('index-return').href = state.galleryHash;
+    document.title = '作品索引 · 随心';
+    return 'index-title';
   }
-
-  function sanitizeMarkdown(markdown, note) {
-    const parser = createMarkdownParser(state.index, note);
-    const dirty = parser.parse(markdown.replace(/^\uFEFF/, ''));
-    const fragment = DOMPurify.sanitize(dirty, {
-      RETURN_DOM_FRAGMENT: true,
-      ALLOWED_TAGS: ['p', 'br', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'del', 's', 'blockquote', 'ul', 'ol', 'li',
-        'pre', 'code', 'a', 'span', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'input', 'details', 'summary', 'sub', 'sup', 'mark'],
-      ALLOWED_ATTR: ['href', 'title', 'class', 'start', 'type', 'checked', 'disabled', 'colspan', 'rowspan'],
-      ALLOW_DATA_ATTR: false, ALLOW_ARIA_ATTR: false
-    });
-    for (const input of fragment.querySelectorAll('input')) {
-      if (input.type !== 'checkbox') { input.remove(); continue; }
-      input.disabled = true;
-    }
-    for (const anchor of fragment.querySelectorAll('a')) {
-      const href = anchor.getAttribute('href') || '';
-      if (href.startsWith('#note=')) {
-        if (!state.data.notes.some((entry) => entry.id === parseRoute(href).id)) replaceUnavailable(anchor);
-      } else if (href.startsWith('#')) {
-        anchor.href = noteHref(note.id, href.slice(1));
-      } else if (/^(https?:|mailto:)/i.test(href)) {
-        anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; anchor.referrerPolicy = 'no-referrer';
-      } else {
-        const [path, heading = ''] = href.split('#');
-        const destination = resolveNote(path, state.index, note, true);
-        if (destination) anchor.href = noteHref(destination.id, heading);
-        else replaceUnavailable(anchor);
-      }
-    }
-    const headingCounts = new Map();
-    for (const heading of fragment.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
-      const text = heading.textContent.trim();
-      const count = headingCounts.get(text) || 0;
-      headingCounts.set(text, count + 1);
-      heading.id = 'section-' + encodeURIComponent(text) + (count ? '-' + count : '');
-      heading.dataset.heading = text;
-    }
-    return fragment;
+  function renderMessage(title,copy,retry = false) {
+    view('message');
+    $('message-title').textContent = title;
+    $('message-copy').textContent = copy;
+    $('message-retry').hidden = !retry;
+    $('message-index').hidden = parseRoute(location.hash).kind === 'index';
+    document.title = title + ' · 随心';
+    return 'message-title';
   }
-
-  function replaceUnavailable(anchor) {
-    const span = document.createElement('span');
-    span.className = 'unavailable-link'; span.title = '这篇笔记或附件未收录在随心中';
-    span.textContent = anchor.textContent; anchor.replaceWith(span);
-  }
-
-  function renderArticle(route = parseRoute(location.hash)) {
-    if (!state.data) return;
-    const isLanding = !route.id;
-    const wasReading = !$('reading-view').hidden;
-    $('landing').hidden = !isLanding;
-    $('reading-view').hidden = isLanding;
-    $('app-shell').classList.toggle('landing-view', isLanding);
-    document.querySelector('.landing-skip').hidden = !isLanding;
-    if (isLanding) {
-      setDrawer(false);
-      document.title = '随心';
-      $('back-to-top').hidden = true;
-      if (wasReading && (!location.hash || location.hash === '#')) {
-        window.scrollTo({ top: 0, behavior: 'instant' });
-        $('landing').querySelector('.site-brand').focus({ preventScroll: true });
-      }
-      return;
-    }
-    const notes = state.data.notes;
-    const note = route.id ? notes.find((item) => item.id === route.id) : notes[0];
-    $('article-navigation').replaceChildren();
-    $('article-body').replaceChildren();
-    $('article-date').textContent = '';
-    $('reading-time').textContent = '';
-    if (!note) {
-      state.activeId = '';
-      $('article-title').textContent = notes.length ? '这篇笔记未找到' : '还没有笔记';
-      const paragraph = document.createElement('p');
-      paragraph.textContent = notes.length ? '从目录中选择一篇笔记继续阅读。' : '下一次同步后，随心文件夹中的笔记会出现在这里。';
-      $('article-body').append(paragraph);
-      $('reading-progress').textContent = '';
-      document.title = '随心'; renderList(); setDrawer(false); updateReadingProgress(); return;
-    }
-    state.activeId = note.id;
+  function renderReading(route) {
+    const note = state.notes.find(item => item.id === route.id);
+    if (!note) return renderMessage('这篇文字暂未收录','它可能已被移动或移除。可以从作品索引继续阅读。');
+    view('reading');
     $('article-title').textContent = note.title;
-    const updated = formatDate(note.updatedAt);
-    $('article-date').textContent = updated ? '更新于 ' + updated : '';
-    const minutes = Math.max(1, Math.ceil(Array.from(note.markdown.replace(/\s/g, '')).length / 400));
-    $('reading-time').textContent = '约 ' + minutes + ' 分钟阅读';
-    $('article-body').append(sanitizeMarkdown(note.markdown, note));
-    const position = notes.indexOf(note);
-    $('reading-progress').textContent = (position + 1) + ' / ' + notes.length;
-    for (const [entry, label] of [[notes[position - 1], '上一篇'], [notes[position + 1], '下一篇']]) {
+    const updated = dateText(note.updatedAt);
+    $('article-date').textContent = updated ? '最近更新 ' + updated : '';
+    const length = Array.from(note.markdown.replace(/\s/g,'')).length;
+    $('reading-time').textContent = length < 400 ? '不到 1 分钟阅读' : '约 ' + Math.ceil(length/400) + ' 分钟阅读';
+    $('article-body').replaceChildren(sanitizeMarkdown(note.markdown,note,state.index,state.notes));
+    const position = state.notes.indexOf(note);
+    $('reading-position').textContent = number(position+1) + ' / ' + number(state.notes.length);
+    const origin = state.readerOrigin || {hash:exhibitHref(note.id),scroll:0,focusId:'chapter-open'};
+    for (const id of ['reader-back','reader-return']) {
+      $(id).href = origin.hash;
+      $(id).textContent = origin.hash === '#index' ? '← 返回作品索引' : '← 回到展馆';
+    }
+    $('article-navigation').replaceChildren();
+    for (const [entry,label,kind] of [[state.notes[position-1],'上一篇','article-previous'],[state.notes[position+1],'下一篇','article-next']]) {
       if (!entry) continue;
-      const link = document.createElement('a'); link.href = noteHref(entry.id);
-      link.className = label === '下一篇' ? 'article-next' : 'article-previous';
+      const link = document.createElement('a'); link.href = noteHref(entry.id); link.className = kind;
       const small = document.createElement('small'); small.textContent = label;
       const title = document.createElement('span'); title.textContent = entry.title;
-      link.append(small, title); $('article-navigation').append(link);
+      link.append(small,title); $('article-navigation').append(link);
     }
     document.title = note.title + ' · 随心';
-    $('reading-status').textContent = '已打开 ' + note.title;
-    renderList(); setDrawer(false);
-    if (route.heading) {
-      let name = route.heading;
-      try { name = decodeURIComponent(name); } catch (_) { /* Keep literal names. */ }
-      const heading = Array.from($('article-body').querySelectorAll('[data-heading]')).find((element) =>
-        element.dataset.heading === name || element.dataset.heading.toLocaleLowerCase().replace(/\s+/g, '-') === name);
-      if (heading) { heading.scrollIntoView({ block: 'start', behavior: 'instant' }); updateReadingProgress(); return; }
-    }
-    window.scrollTo({ top: 0, behavior: 'instant' });
-    $('article').focus({ preventScroll: true });
-    updateReadingProgress();
+    return 'article';
   }
-
-  let progressFrame = 0;
-  function updateReadingProgress() {
-    progressFrame = 0;
-    if ($('reading-view').hidden) return;
-    const article = $('article');
-    const start = article.getBoundingClientRect().top + window.scrollY;
-    const distance = start + article.offsetHeight - window.innerHeight;
-    const progress = distance > 0 ? Math.min(1, Math.max(0, window.scrollY / distance)) : 1;
+  function render(options = {}) {
+    const version = ++state.version;
+    const route = parseRoute(location.hash);
+    const previousView = document.body.dataset.view;
+    let focusId;
+    if (route.kind === 'entrance') focusId = renderChapter(route);
+    else if (!state.data) focusId = renderMessage(state.failed ? '文字暂时无法加载' : '正在整理文字…',
+      state.failed ? '连接暂时中断，请重试。' : '请稍等片刻。',state.failed);
+    else if (route.kind === 'reading') focusId = renderReading(route);
+    else if (route.kind === 'index') focusId = renderIndex();
+    else focusId = renderChapter(route);
+    state.hash = location.hash;
+    history.replaceState(historyEntry({scroll:options.restore?.scroll || 0,focusId:options.restore?.focusId || focusId}),'',location.href);
+    const currentView = document.body.dataset.view;
+    document.dispatchEvent(new CustomEvent('suixin:navigate',{detail:{from:previousView,to:currentView}}));
+    requestAnimationFrame(() => {
+      if (version !== state.version) return;
+      let heading = null;
+      if (route.kind === 'reading' && route.heading && currentView === 'reading') {
+        heading = Array.from($('article-body').querySelectorAll('[data-heading]')).find(el =>
+          el.dataset.heading === route.heading || el.dataset.heading.toLocaleLowerCase().replace(/\s+/g,'-') === route.heading);
+      }
+      if (heading && !options.restore) { heading.tabIndex = -1; heading.focus({preventScroll:true}); heading.scrollIntoView({block:'start',behavior:'instant'}); }
+      else {
+        window.scrollTo({top:options.restore?.scroll || 0,behavior:'instant'});
+        const target = options.search && currentView === 'index' ? $('search') : $(options.restore?.focusId || focusId);
+        if (!options.initial) target?.focus({preventScroll:true});
+      }
+      updateProgress();
+      $('navigation-status').textContent = currentView === 'gallery' ? $('position-label').textContent + '，' + $('chapter-current').textContent + ' / ' + $('chapter-total').textContent : currentView === 'reading' ? '已打开全文' : currentView === 'index' ? '已打开作品索引' : $('message-title').textContent;
+    });
+  }
+  function updateProgress() {
+    state.progressFrame = 0;
+    if (document.body.dataset.view !== 'reading') return;
+    const start = $('article').getBoundingClientRect().top + scrollY;
+    const distance = Math.max(0,start + $('article').offsetHeight - innerHeight);
+    const progress = distance ? Math.min(1,Math.max(0,scrollY/distance)) : 1;
     $('reading-track-fill').style.transform = 'scaleX(' + progress.toFixed(4) + ')';
-    $('back-to-top').hidden = window.scrollY < 500;
+    $('back-to-top').hidden = scrollY < 500;
   }
-  function scheduleProgress() {
-    if (!progressFrame) progressFrame = requestAnimationFrame(updateReadingProgress);
+  function step(delta) {
+    if (document.body.dataset.view !== 'gallery' || !state.data || !state.notes.length) return;
+    const next = state.position + delta;
+    if (next < 0 || next > state.notes.length + 1) return;
+    navigate(galleryHref(next));
   }
-  window.addEventListener('scroll', scheduleProgress, { passive: true });
-  window.addEventListener('resize', scheduleProgress, { passive: true });
-  $('back-to-top').addEventListener('click', () => {
-    window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
-    $('article').focus({ preventScroll: true });
+  function restoreHistory() {
+    if (location.hash === state.hash) return;
+    const entry = history.state?.suixin && history.state.hash === location.hash ? history.state : {};
+    state.query = entry.query ?? state.query;
+    state.galleryHash = entry.galleryHash || state.galleryHash;
+    state.readerOrigin = entry.readerOrigin || null;
+    render({restore:entry.suixin ? entry : undefined});
+  }
+  document.addEventListener('click',event => {
+    const link = event.target.closest('a[href]');
+    if (!link || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    const href = link.getAttribute('href');
+    if (!href?.startsWith('#')) return;
+    event.preventDefault();
+    if (link.id === 'skip-link') {
+      const target = $(href.slice(1)); target?.focus({preventScroll:true}); target?.scrollIntoView({block:'start'}); return;
+    }
+    if (link.id === 'reader-back' || link.id === 'reader-return') return returnFromReading();
+    navigate(href);
   });
+  $('chapter-prev').addEventListener('click',() => step(-1));
+  $('chapter-next').addEventListener('click',() => step(1));
+  $('search').addEventListener('input',() => { state.query = $('search').value; renderList(); savePosition(); });
+  function clearSearch() { state.query = ''; renderList(); $('search').focus(); savePosition(); }
+  $('clear-search').addEventListener('click',clearSearch);
+  $('empty-clear').addEventListener('click',clearSearch);
+  $('back-to-top').addEventListener('click',() => {
+    window.scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
+    $('article').focus({preventScroll:true});
+  });
+  document.addEventListener('keydown',event => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing || event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])')) return;
+    if (event.key === '/') { event.preventDefault(); navigate('#index',{search:true}); return; }
+    if (document.body.dataset.view !== 'gallery' || (getSelection()?.toString() || '')) return;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); step(event.key === 'ArrowRight' ? 1 : -1); }
+  });
+  let touchStart = null;
+  $('chapter').addEventListener('touchstart',event => {
+    if (event.touches.length !== 1 || event.target.closest('a,button,input') || getSelection()?.toString()) { touchStart = null; return; }
+    const touch = event.touches[0]; touchStart = {x:touch.clientX,y:touch.clientY,time:Date.now()};
+  },{passive:true});
+  $('chapter').addEventListener('touchmove',event => { if (event.touches.length !== 1) touchStart = null; },{passive:true});
+  $('chapter').addEventListener('touchcancel',() => { touchStart = null; },{passive:true});
+  $('chapter').addEventListener('touchend',event => {
+    if (!touchStart || event.touches.length || getSelection()?.toString()) { touchStart = null; return; }
+    const touch = event.changedTouches[0], dx = touch.clientX-touchStart.x, dy = touch.clientY-touchStart.y;
+    if (Math.abs(dx) > 65 && Math.abs(dx) > Math.abs(dy)*1.8 && Date.now()-touchStart.time < 900) step(dx < 0 ? 1 : -1);
+    touchStart = null;
+  },{passive:true});
+  window.addEventListener('popstate',restoreHistory);
+  window.addEventListener('hashchange',restoreHistory);
+  window.addEventListener('scroll',() => {
+    if (!state.progressFrame) state.progressFrame = requestAnimationFrame(() => {
+      updateProgress();
+      if (state.hash === location.hash) savePosition();
+    });
+  },{passive:true});
+  window.addEventListener('resize',() => { if (!state.progressFrame) state.progressFrame = requestAnimationFrame(updateProgress); });
+  window.addEventListener('pagehide',savePosition);
 
   async function loadNotes() {
-    if (state.busy) return;
-    state.busy = true;
-    $('load-retry').hidden = true;
-    $('load-status').textContent = '正在加载笔记…';
+    if (state.loading) return;
+    const requestedHash = location.hash;
+    const entry = history.state?.suixin ? history.state : {};
+    const restore = entry.scroll > 0 || entry.focusId === 'search' || entry.focusId?.startsWith('index-note-') ? entry : undefined;
+    state.loading = true; state.failed = false;
+    render({initial:true,restore});
     try {
-      const response = await fetch('./notes.json', { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000) });
+      const response = await fetch('./notes.json',{cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(15000)});
       if (!response.ok) throw new Error('Notes unavailable');
       state.data = validateNotes(await response.json());
-      state.index = createNoteIndex(state.data.notes);
-      const updated = formatDate(state.data.updatedAt);
-      $('site-updated').textContent = updated ? '同步于 ' + updated : '';
-      $('load-screen').hidden = true;
-      $('app-shell').hidden = false;
-      $('sidebar').inert = mobile.matches;
-      renderList();
-      renderLanding();
-      renderArticle();
-      requestAnimationFrame(() => $('app-shell').classList.add('is-ready'));
-    } catch (_) {
-      state.data = null;
-      $('load-status').textContent = '笔记暂时无法加载，请稍后重试。';
-      $('load-retry').hidden = false;
-      if (!parseRoute(location.hash).id) {
-        const message = document.createElement('p');
-        message.className = 'story-empty';
-        message.textContent = '随笔暂时无法加载。';
-        const retry = document.createElement('button');
-        retry.className = 'text-link';
-        retry.type = 'button';
-        retry.textContent = '重新加载 ↗';
-        retry.addEventListener('click', loadNotes);
-        $('story-list').replaceChildren(message, retry);
-      }
-    } finally { state.busy = false; }
+      state.notes = sortNotes(state.data.notes); state.index = createNoteIndex(state.notes);
+    } catch (_) { state.failed = true; state.data = null; state.notes = []; state.index = null; }
+    state.loading = false;
+    render({initial:true,restore:requestedHash === location.hash ? restore : undefined});
   }
-  $('load-retry').addEventListener('click', loadNotes);
-  $('mobile-home').addEventListener('click', () => { location.hash = ''; });
-
-  $('search').addEventListener('input', () => { if (state.data) renderList(); });
-  $('archive-search').addEventListener('input', () => { if (state.data) renderLanding(); });
-  $('all-notes').addEventListener('click', () => {
-    state.archiveExpanded = !state.archiveExpanded;
-    renderLanding();
-    if (!state.archiveExpanded) $('story-list').scrollIntoView({ block: 'start', behavior: 'instant' });
-  });
-  $('menu-toggle').addEventListener('click', () => setDrawer(!state.drawerOpen));
-  $('drawer-close').addEventListener('click', () => setDrawer(false));
-  $('drawer-backdrop').addEventListener('click', () => setDrawer(false));
-  $('home-link').addEventListener('click', (event) => {
-    event.preventDefault();
-    location.hash = '';
-    setDrawer(false);
-  });
-  $('note-list').addEventListener('click', (event) => {
-    if (event.target.closest('a')) setDrawer(false);
-  });
-  window.addEventListener('hashchange', () => renderArticle());
-  mobile.addEventListener('change', () => { setDrawer(false); $('sidebar').inert = mobile.matches; });
-  document.addEventListener('keydown', (event) => {
-    if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey &&
-        !event.target.closest('input,textarea,select,[contenteditable="true"]')) {
-      event.preventDefault();
-      if (!$('reading-view').hidden && mobile.matches) setDrawer(true);
-      const input = $('reading-view').hidden ? $('archive-search') : $('search');
-      input.focus();
-      return;
-    }
-    if (!state.drawerOpen) return;
-    if (event.key === 'Escape') { event.preventDefault(); setDrawer(false); }
-    if (event.key === 'Tab') {
-      const elements = Array.from($('sidebar').querySelectorAll('a[href],button,input')).filter((element) => !element.disabled && element.getClientRects().length);
-      const first = elements[0], last = elements[elements.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    }
-  });
-  $('sidebar').inert = mobile.matches;
-  if (!parseRoute(location.hash).id) {
-    $('load-screen').hidden = true;
-    $('app-shell').hidden = false;
-    requestAnimationFrame(() => $('app-shell').classList.add('is-ready'));
-  }
+  $('load-retry').addEventListener('click',loadNotes);
+  $('message-retry').addEventListener('click',loadNotes);
+  history.replaceState(historyEntry({...initial}),'',location.href);
   loadNotes();
 })();

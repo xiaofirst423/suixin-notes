@@ -25,8 +25,7 @@
   </div>
   <header class="site-header">
     <a class="site-brand" href="#" aria-label="随心，回到入口"><span class="brand-name">随心<span class="brand-period">。</span></span><span class="brand-caption">A PRIVATE COLLECTION</span></a>
-    <span class="header-note">文字有光，片刻有形。</span>
-    <a class="header-index" id="header-index" href="#index">作品索引 <span aria-hidden="true">↗</span></a>
+    <div class="brand-secondary"><span>suixin</span><small>私人文字展馆</small></div><nav id="breadcrumbs" aria-label="面包屑"></nav><span class="header-note">文字有光，片刻有形。</span>
   </header>
   <main class="gallery-view" id="gallery-view" aria-label="文字展馆">
     <section class="chapter entrance-chapter" id="chapter" aria-labelledby="chapter-title">
@@ -50,16 +49,18 @@
       <button class="chapter-nav" id="chapter-next" type="button"><span id="chapter-next-label">开始看展</span><span aria-hidden="true">→</span></button>
     </nav>
   </main>
-  <main class="index-view" id="index-view" hidden aria-labelledby="index-title">
+  <section class="index-view" id="index-view" hidden role="region" aria-labelledby="index-title">
+    <a class="index-close" href="#" aria-label="关闭作品索引">关闭 ×</a>
     <div class="index-intro"><div><p class="eyebrow">THE COLLECTION / 作品索引</p><h1 id="index-title" tabindex="-1">文字的收藏</h1></div><p class="index-intro-note">每一篇，都是曾经停留的片刻。<br><span id="collection-meta"></span></p></div>
     <div class="index-toolbar">
       <div class="index-search"><label class="sr-only" for="search">搜索随笔标题和正文</label><span class="search-label" aria-hidden="true">寻找</span><input id="search" type="search" placeholder="一个标题，或一句记得的话…" autocomplete="off" spellcheck="false" aria-keyshortcuts="/" aria-controls="note-list"><button id="clear-search" class="text-button" type="button" hidden>清空</button><kbd aria-hidden="true">/</kbd></div>
       <p class="result-count" id="result-count" role="status" aria-live="polite"></p>
     </div>
-    <ol class="note-list" id="note-list"></ol>
+    <div id="index-scroll" tabindex="0" aria-label="作品列表，可滚动"><ol class="note-list" id="note-list"></ol>
     <div class="empty-state" id="search-empty" hidden><p>暂时没有找到这段文字。</p><button id="empty-clear" class="quiet-action" type="button">清空搜索，看看全部</button></div>
-    <footer class="index-footer"><a class="quiet-action" id="index-return" href="#">← 返回展馆</a><span>慢慢来，文字一直在这里。</span></footer>
-  </main>
+    </div><div class="index-progress" role="progressbar" aria-label="索引列表进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="index-progress-fill"></span></div><span id="index-progress-label"></span>
+    <footer class="index-footer"><a class="quiet-action" id="index-return" href="#" aria-label="返回展馆" title="返回展馆"><span aria-hidden="true">←</span></a><span>慢慢来，文字一直在这里。</span></footer>
+  </section>
   <main class="reading-view" id="reading-view" hidden aria-labelledby="article-title">
     <div class="reading-track" aria-hidden="true"><span id="reading-track-fill"></span></div>
     <nav class="reader-toolbar" aria-label="阅读导航"><a class="quiet-action" id="reader-back" href="#">← 回到展馆</a><span id="reading-position"></span></nav>
@@ -77,3 +78,4 @@
   <noscript><p class="noscript-message">请启用浏览器的 JavaScript，以浏览展馆和阅读文字。</p></noscript>
 </body>
 </html>
+

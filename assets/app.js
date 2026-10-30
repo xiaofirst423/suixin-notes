@@ -6,7 +6,7 @@
   const initial = history.state && history.state.suixin && history.state.hash === location.hash ? history.state : {};
   const state = { data:null, notes:[], index:null, loading:false, failed:false, hash:location.hash,
     query:initial.query || '', galleryHash:initial.galleryHash || (parseRoute(location.hash).kind === 'reading' ? exhibitHref(parseRoute(location.hash).id) : '#'),
-    readerOrigin:initial.readerOrigin || null, position:0, version:0, progressFrame:0 };
+    indexScroll:initial.indexScroll || 0, art:initial.art || null, lastNote:initial.lastNote || null, lastArt:initial.lastArt || null, readerOrigin:initial.readerOrigin || null, position:0, version:0, progressFrame:0 };
   history.scrollRestoration = 'manual';
 
   function dateText(value) {
@@ -21,7 +21,7 @@
   }
   function historyEntry(extra = {}) {
     return {suixin:true,hash:location.hash,query:state.query,galleryHash:state.galleryHash,readerOrigin:state.readerOrigin,
-      scroll:scrollY,focusId:document.activeElement?.id || '',...extra};
+      indexScroll:state.indexScroll,art:state.art,lastNote:state.lastNote,lastArt:state.lastArt,scroll:scrollY,focusId:document.activeElement?.id || '',...extra};
   }
   function savePosition() { history.replaceState(historyEntry(),'',location.href); }
   function galleryHref(position) {
@@ -31,12 +31,15 @@
   }
   function originForReading(route) {
     const from = parseRoute(location.hash);
-    if (from.kind === 'reading') return state.readerOrigin || {hash:exhibitHref(route.id),scroll:0,focusId:'chapter-open'};
-    if (from.kind === 'index') return {hash:'#index',query:state.query,scroll:scrollY,focusId:'index-note-' + route.id};
+    if (from.kind === 'reading') return state.readerOrigin || {hash:'#index',indexScroll:state.indexScroll,scroll:0,focusId:'index-title'};
+    if (from.kind === 'index') return {hash:'#index',query:state.query,indexScroll:$('index-scroll').scrollTop,scroll:0,focusId:'index-note-' + route.id};
     if (['entrance','exhibit','end'].includes(from.kind)) return {hash:location.hash || '#',scroll:scrollY,focusId:'chapter-open'};
-    return {hash:exhibitHref(route.id),scroll:0,focusId:'chapter-open'};
+    return {hash:'#index',indexScroll:state.indexScroll,scroll:0,focusId:'index-title'};
   }
   function navigate(hash, options = {}) {
+    if (parseRoute(hash).kind === 'exhibit') hash = noteHref(parseRoute(hash).id);
+    if (parseRoute(hash).kind === 'end') hash = '#';
+    if (hash === '#index' && document.body.dataset.view === 'reading' && !options.restore) return returnFromReading();
     if (hash === location.hash || (hash === '#' && !location.hash)) {
       if (options.search) $('search').focus();
       return;
@@ -52,21 +55,19 @@
   }
   function returnFromReading() {
     const route = parseRoute(location.hash);
-    const origin = state.readerOrigin || {hash:exhibitHref(route.id),scroll:0,focusId:'chapter-open'};
+    const origin = state.readerOrigin || {hash:'#index',indexScroll:state.indexScroll,scroll:0,focusId:'index-title'};
     navigate(origin.hash,{restore:origin});
   }
   function view(kind) {
     document.body.dataset.view = kind;
-    $('gallery-view').hidden = kind !== 'gallery';
+    $('gallery-view').hidden = !['gallery','index'].includes(kind);
     $('index-view').hidden = kind !== 'index';
     $('reading-view').hidden = kind !== 'reading';
     $('message-view').hidden = kind !== 'message';
-    $('scene-atmosphere').hidden = kind !== 'gallery';
+    $('scene-atmosphere').hidden = false;
     $('back-to-top').hidden = true;
     const destinations = {gallery:'#chapter-title',index:'#index-title',reading:'#article',message:'#message-title'};
     $('skip-link').href = destinations[kind];
-    if (kind === 'index') setLink($('header-index'),state.galleryHash,'返回展馆','↗');
-    else setLink($('header-index'),'#index','作品索引','↗');
   }
   function setArt(name) {
     const target = './assets/gallery/' + name + '.webp';
@@ -92,7 +93,7 @@
     $('chapter').dataset.variant = String(variant);
     setArt(note ? ['door','wall','paper'][variant] : ending ? 'paper' : 'door');
     $('chapter-title').textContent = entrance ? '随心' : ending ? '灯还亮着，\n下次再来。' : note.title;
-    $('chapter-label').textContent = entrance ? 'SUIXIN · 私人文字展馆' : ending ? 'UNTIL NEXT TIME / 尾声' : 'COLLECTION ' + number(position) + ' / 文字收藏';
+    $('chapter-label').textContent = entrance ? '' : ending ? 'UNTIL NEXT TIME / 尾声' : 'COLLECTION ' + number(position) + ' / 文字收藏';
     $('chapter-subtitle').hidden = !entrance;
     $('chapter-subtitle').textContent = '给片刻，一个停留的地方。';
     $('chapter-description').textContent = entrance ? '一些片刻，一些故事。\n在这里，慢慢看，轻轻读。' : ending ? '把日子写成故事，把故事留给自己。\n谢谢你，在这些文字里停留。' : excerptText(note);
@@ -100,7 +101,7 @@
     const updated = note ? dateText(note.updatedAt) : '';
     $('chapter-date').hidden = !updated;
     $('chapter-date').textContent = updated ? '最近更新 ' + updated : '';
-    setLink($('chapter-open'), note ? noteHref(note.id) : ending ? '#' : n ? exhibitHref(state.notes[0].id) : '#index',
+    setLink($('chapter-open'), note ? noteHref(note.id) : ending ? '#' : '#index',
       note ? '阅读全文' : ending ? '重新逛展' : n || !state.data ? '进入展馆' : '作品索引','↗');
     $('chapter-index').hidden = !!note;
     $('chapter-index').textContent = ending ? '查看全部作品' : '作品索引';
@@ -143,12 +144,14 @@
       link.append(num,copy,date,arrow); item.append(link); fragment.append(item);
     }
     $('note-list').append(fragment);
+    requestAnimationFrame(updateIndexProgress);
   }
   function renderIndex() {
+    renderChapter({kind:'entrance'});
     view('index');
     renderList();
     $('collection-meta').textContent = state.notes.length + ' 篇文字 · 持续记录中';
-    $('index-return').href = state.galleryHash;
+    $('index-return').href = '#';
     document.title = '作品索引 · 随心';
     return 'index-title';
   }
@@ -165,6 +168,8 @@
     const note = state.notes.find(item => item.id === route.id);
     if (!note) return renderMessage('这篇文字暂未收录','它可能已被移动或移除。可以从作品索引继续阅读。');
     view('reading');
+    if (state.lastNote !== note.id) { state.art = state.lastArt === 'wall' ? 'paper' : 'wall'; state.lastNote = note.id; state.lastArt = state.art; }
+    setArt(state.art || 'wall');
     $('article-title').textContent = note.title;
     const updated = dateText(note.updatedAt);
     $('article-date').textContent = updated ? '最近更新 ' + updated : '';
@@ -173,7 +178,7 @@
     $('article-body').replaceChildren(sanitizeMarkdown(note.markdown,note,state.index,state.notes));
     const position = state.notes.indexOf(note);
     $('reading-position').textContent = number(position+1) + ' / ' + number(state.notes.length);
-    const origin = state.readerOrigin || {hash:exhibitHref(note.id),scroll:0,focusId:'chapter-open'};
+    const origin = state.readerOrigin || {hash:'#index',indexScroll:state.indexScroll,scroll:0,focusId:'index-title'};
     for (const id of ['reader-back','reader-return']) {
       $(id).href = origin.hash;
       $(id).textContent = origin.hash === '#index' ? '← 返回作品索引' : '← 回到展馆';
@@ -191,7 +196,9 @@
   }
   function render(options = {}) {
     const version = ++state.version;
-    const route = parseRoute(location.hash);
+    let route = parseRoute(location.hash);
+    if (route.kind === 'exhibit') { history.replaceState(history.state,'',noteHref(route.id)); route = parseRoute(location.hash); }
+    if (route.kind === 'end') route = {kind:'entrance'};
     const previousView = document.body.dataset.view;
     let focusId;
     if (route.kind === 'entrance') focusId = renderChapter(route);
@@ -200,6 +207,7 @@
     else if (route.kind === 'reading') focusId = renderReading(route);
     else if (route.kind === 'index') focusId = renderIndex();
     else focusId = renderChapter(route);
+    renderBreadcrumbs();
     state.hash = location.hash;
     history.replaceState(historyEntry({scroll:options.restore?.scroll || 0,focusId:options.restore?.focusId || focusId}),'',location.href);
     const currentView = document.body.dataset.view;
@@ -217,6 +225,7 @@
         const target = options.search && currentView === 'index' ? $('search') : $(options.restore?.focusId || focusId);
         if (!options.initial) target?.focus({preventScroll:true});
       }
+      if (currentView === 'index') { $('index-scroll').scrollTop = options.restore?.indexScroll ?? state.indexScroll; updateIndexProgress(); }
       updateProgress();
       $('navigation-status').textContent = currentView === 'gallery' ? $('position-label').textContent + '，' + $('chapter-current').textContent + ' / ' + $('chapter-total').textContent : currentView === 'reading' ? '已打开全文' : currentView === 'index' ? '已打开作品索引' : $('message-title').textContent;
     });
@@ -230,16 +239,39 @@
     $('reading-track-fill').style.transform = 'scaleX(' + progress.toFixed(4) + ')';
     $('back-to-top').hidden = scrollY < 500;
   }
-  function step(delta) {
-    if (document.body.dataset.view !== 'gallery' || !state.data || !state.notes.length) return;
-    const next = state.position + delta;
-    if (next < 0 || next > state.notes.length + 1) return;
-    navigate(galleryHref(next));
+  function updateIndexProgress() {
+    const box = $('index-scroll');
+    const distance = Math.max(0,box.scrollHeight-box.clientHeight);
+    const progress = distance ? Math.max(0,Math.min(1,box.scrollTop/distance)) : 1;
+    $('index-progress-fill').style.transform = 'scaleY('+progress+')';
+    document.querySelector('.index-progress').setAttribute('aria-valuenow',String(Math.round(progress*100)));
+    $('index-progress-label').textContent = distance ? Math.round(progress*100)+'%' : '全部呈现';
   }
+  function renderBreadcrumbs() {
+    const kind = document.body.dataset.view;
+    const nav = $('breadcrumbs'); nav.replaceChildren();
+    const items = [['主页','#']];
+    if (kind === 'index' || kind === 'reading') items.push(['进入展馆','#index']);
+    if (kind === 'reading') items.push([$('article-title').textContent,location.hash]);
+    items.forEach(([label,href],i) => {
+      if(i) nav.append(document.createTextNode(' / '));
+      const node = document.createElement(i === items.length-1 ? 'span' : 'a');
+      node.textContent = label; node.title = label;
+      if (node.tagName === 'A') node.href = href; else node.setAttribute('aria-current','page');
+      nav.append(node);
+    });
+    $('chapter-open').setAttribute('aria-expanded',String(kind === 'index'));
+    $('chapter-open').setAttribute('aria-controls','index-view');
+  }
+  $('index-scroll').addEventListener('scroll',() => {state.indexScroll = $('index-scroll').scrollTop; updateIndexProgress(); savePosition();},{passive:true});
+  document.addEventListener('keydown',event => {if(event.key === 'Escape' && document.body.dataset.view === 'index') {event.preventDefault(); navigate('#',{restore:{focusId:'chapter-open'}});}});
+  window.addEventListener('resize',updateIndexProgress);
   function restoreHistory() {
     if (location.hash === state.hash) return;
     const entry = history.state?.suixin && history.state.hash === location.hash ? history.state : {};
     state.query = entry.query ?? state.query;
+    state.indexScroll = entry.indexScroll ?? state.indexScroll;
+    state.art = entry.art || state.art; state.lastArt = entry.lastArt || state.lastArt; state.lastNote = entry.lastNote || state.lastNote;
     state.galleryHash = entry.galleryHash || state.galleryHash;
     state.readerOrigin = entry.readerOrigin || null;
     render({restore:entry.suixin ? entry : undefined});
@@ -256,9 +288,7 @@
     if (link.id === 'reader-back' || link.id === 'reader-return') return returnFromReading();
     navigate(href);
   });
-  $('chapter-prev').addEventListener('click',() => step(-1));
-  $('chapter-next').addEventListener('click',() => step(1));
-  $('search').addEventListener('input',() => { state.query = $('search').value; renderList(); savePosition(); });
+  $('search').addEventListener('input',() => { state.query = $('search').value; state.indexScroll = 0; $('index-scroll').scrollTop = 0; renderList(); savePosition(); });
   function clearSearch() { state.query = ''; renderList(); $('search').focus(); savePosition(); }
   $('clear-search').addEventListener('click',clearSearch);
   $('empty-clear').addEventListener('click',clearSearch);
@@ -269,22 +299,7 @@
   document.addEventListener('keydown',event => {
     if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing || event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])')) return;
     if (event.key === '/') { event.preventDefault(); navigate('#index',{search:true}); return; }
-    if (document.body.dataset.view !== 'gallery' || (getSelection()?.toString() || '')) return;
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); step(event.key === 'ArrowRight' ? 1 : -1); }
   });
-  let touchStart = null;
-  $('chapter').addEventListener('touchstart',event => {
-    if (event.touches.length !== 1 || event.target.closest('a,button,input') || getSelection()?.toString()) { touchStart = null; return; }
-    const touch = event.touches[0]; touchStart = {x:touch.clientX,y:touch.clientY,time:Date.now()};
-  },{passive:true});
-  $('chapter').addEventListener('touchmove',event => { if (event.touches.length !== 1) touchStart = null; },{passive:true});
-  $('chapter').addEventListener('touchcancel',() => { touchStart = null; },{passive:true});
-  $('chapter').addEventListener('touchend',event => {
-    if (!touchStart || event.touches.length || getSelection()?.toString()) { touchStart = null; return; }
-    const touch = event.changedTouches[0], dx = touch.clientX-touchStart.x, dy = touch.clientY-touchStart.y;
-    if (Math.abs(dx) > 65 && Math.abs(dx) > Math.abs(dy)*1.8 && Date.now()-touchStart.time < 900) step(dx < 0 ? 1 : -1);
-    touchStart = null;
-  },{passive:true});
   window.addEventListener('popstate',restoreHistory);
   window.addEventListener('hashchange',restoreHistory);
   window.addEventListener('scroll',() => {

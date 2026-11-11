@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <meta name="theme-color" content="#fafaf8">
+  <meta name="theme-color" content="#ffffff">
   <meta name="description" content="随心，日常随笔。">
   <meta name="robots" content="noindex,nofollow,noarchive">
   <meta name="referrer" content="no-referrer">
@@ -18,25 +18,32 @@
 </head>
 <body data-view="index" data-loading="true">
   <a class="skip-link" id="skip-link" href="#index-title">跳到主要内容</a>
-  <header class="site-header page-column">
-    <a class="site-brand" href="#" aria-label="随心，回到首页">随心</a>
-    <a class="search-link" id="open-search" href="#index" aria-controls="index-toolbar" aria-expanded="false" aria-keyshortcuts="/">搜索</a>
+  <header class="site-header">
+    <div class="header-inner page-column">
+      <a class="site-brand" href="#" aria-label="随心，回到首页">随心</a>
+      <a class="search-link" id="open-search" href="#index" aria-controls="index-toolbar" aria-expanded="false" aria-keyshortcuts="/">搜索</a>
+    </div>
   </header>
   <nav class="breadcrumbs page-column" aria-label="面包屑导航"><ol id="breadcrumbs"><li><span aria-current="page">首页</span></li></ol></nav>
   <main class="index-view page-column" id="index-view" aria-labelledby="index-title">
-    <h1 class="sr-only" id="index-title" tabindex="-1">文章</h1>
-    <div class="index-toolbar" id="index-toolbar" hidden>
-      <div class="index-search">
-        <label class="sr-only" for="search">搜索文章标题和正文</label>
-        <input id="search" type="search" placeholder="搜索标题，或一句记得的话" autocomplete="off" spellcheck="false" aria-controls="note-list">
+    <h1 class="page-title" id="index-title" tabindex="-1">文章</h1>
+    <div class="index-toolbar" id="index-toolbar" role="search" hidden>
+      <label for="search">标题或正文</label>
+      <div class="search-controls">
+        <div class="index-search">
+          <input id="search" type="search" placeholder="输入关键词" autocomplete="off" spellcheck="false" aria-controls="note-list">
+        </div>
         <button class="text-button" id="clear-search" type="button" hidden>清空</button>
+        <button class="text-button" id="close-search" type="button">收起</button>
       </div>
-      <button class="text-button" id="close-search" type="button">收起</button>
     </div>
-    <p class="sr-only" id="result-count" role="status" aria-live="polite"></p>
+    <p class="result-count" id="result-count" role="status" hidden></p>
     <div class="load-feedback" id="load-feedback">
-      <p id="load-status" role="status">正在整理文字…</p>
-      <button class="text-button" id="load-retry" type="button" hidden>重新加载</button>
+      <div class="load-status">
+        <span class="error-symbol" id="load-error-symbol" aria-hidden="true" hidden>!</span>
+        <p id="load-status" role="status">正在加载文章…</p>
+      </div>
+      <button class="text-button primary" id="load-retry" type="button" hidden>重新加载</button>
     </div>
     <ol class="note-list" id="note-list"></ol>
     <div class="empty-state" id="search-empty" hidden>
@@ -55,8 +62,11 @@
   </main>
   <main class="message-view page-column" id="message-view" hidden aria-labelledby="message-title">
     <h1 id="message-title" tabindex="-1"></h1>
-    <p id="message-copy"></p>
-    <button class="text-button" id="message-retry" type="button" hidden>重新加载</button>
+    <p class="load-status">
+      <span class="error-symbol" id="message-error-symbol" aria-hidden="true" hidden>!</span>
+      <span id="message-copy"></span>
+    </p>
+    <button class="text-button primary" id="message-retry" type="button" hidden>重新加载</button>
   </main>
   <p class="sr-only" id="navigation-status" role="status" aria-live="polite"></p>
   <noscript><p class="noscript-message">请启用浏览器的 JavaScript，以查看文章列表和阅读文字。</p></noscript>

@@ -108,10 +108,11 @@
     $('result-count').hidden = !state.query.trim();
     $('result-count').textContent = state.query.trim() ? '找到 ' + notes.length + ' 篇文章' : '';
     $('load-feedback').hidden = !!state.data;
-    $('load-status').textContent = state.loading ? '正在整理文字…' : '文字暂时无法加载，请重试。';
+    $('load-status').textContent = state.loading ? '正在加载文章…' : '文章暂时无法加载，请重试。';
+    $('load-error-symbol').hidden = !state.failed;
     $('load-retry').hidden = !state.failed;
     $('search-empty').hidden = !state.data || notes.length > 0;
-    $('search-empty').querySelector('p').textContent = state.notes.length ? '暂时没有找到这段文字。' : '第一篇文字，正在来的路上。';
+    $('search-empty').querySelector('p').textContent = state.notes.length ? '没有找到匹配的文章。' : '暂无文章。';
     $('empty-clear').hidden = !state.query;
     const fragment = document.createDocumentFragment();
     for (const note of notes) {
@@ -137,6 +138,7 @@
     view('message');
     $('message-title').textContent = title;
     $('message-copy').textContent = copy;
+    $('message-error-symbol').hidden = !retry;
     $('message-retry').hidden = !retry;
     document.title = title + ' · 随心';
     return 'message-title';
@@ -172,7 +174,7 @@
     let focusId;
     if (route.kind === 'reading') {
       focusId = state.data ? renderReading(route)
-        : renderMessage(state.failed ? '文字暂时无法加载' : '正在整理文字…', state.failed ? '连接暂时中断，请重试。' : '请稍等片刻。', state.failed);
+        : renderMessage(state.failed ? '文章暂时无法加载' : '正在加载文章…', state.failed ? '请重新加载文章。' : '请稍等片刻。', state.failed);
     } else {
       view('index'); renderList(); focusId = 'index-title';
     }

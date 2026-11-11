@@ -7,10 +7,10 @@
     cancel();
     if (reduced.matches || typeof Element.prototype.animate !== 'function') return;
     const view = event.detail.to;
-    const target = document.getElementById(view === 'gallery' ? 'chapter-copy' : view === 'reading' ? 'article' : view === 'index' ? 'index-view' : 'message-view');
+    const target = document.getElementById(view === 'reading' ? 'article' : view === 'index' ? 'index-view' : 'message-view');
     if (!target) return;
-    const animation = target.animate([{opacity:0,transform:'translateY(12px)'},{opacity:1,transform:'translateY(0)'}],
-      {duration:450,easing:'cubic-bezier(.22,.61,.36,1)'});
+    const animation = target.animate([{opacity:0},{opacity:1}],
+      {duration:160,easing:'ease-out'});
     active.add(animation);
     animation.finished.then(() => active.delete(animation),() => active.delete(animation));
   });

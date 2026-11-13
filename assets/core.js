@@ -148,9 +148,15 @@
   }
 
 
-  function sortNotes(notes) {
-    const time = note => Number.isFinite(Date.parse(note.updatedAt)) ? Date.parse(note.updatedAt) : 0;
-    return [...notes].sort((a,b) => time(b) - time(a) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  function sortNotes(notes, pinnedIds = []) {
+    const pins = new Map(pinnedIds.map((id, index) => [id, index]));
+    const rank = note => pins.get(note.id) ?? pins.size;
+    const time = note => {
+      const timestamp = typeof note.updatedAt === 'string' ? Date.parse(note.updatedAt) : NaN;
+      return Number.isFinite(timestamp) ? timestamp : -Infinity;
+    };
+    return [...notes].sort((a, b) => rank(a) - rank(b) || time(b) - time(a) ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
   function sceneVariant(id) {
     let hash = 2166136261;

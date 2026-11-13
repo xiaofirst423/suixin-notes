@@ -3,8 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="color-scheme" content="light dark">
   <meta name="description" content="随心，日常随笔。">
   <meta name="robots" content="noindex,nofollow,noarchive">
   <meta name="referrer" content="no-referrer">
@@ -18,15 +17,21 @@
 </head>
 <body data-view="index" data-loading="true">
   <a class="skip-link" id="skip-link" href="#index-title">跳到主要内容</a>
+  <progress id="reading-progress" max="100" value="0" aria-label="阅读进度" hidden></progress>
   <header class="site-header">
     <div class="header-inner page-column">
       <a class="site-brand" href="#" aria-label="随心，回到首页">随心</a>
-      <a class="search-link" id="open-search" href="#index" aria-controls="index-toolbar" aria-expanded="false" aria-keyshortcuts="/">搜索</a>
+      <a class="reader-back" id="reader-back" href="#index" hidden>
+        <span aria-hidden="true">←</span> <span id="reader-back-label">返回目录</span>
+      </a>
+      <nav class="header-actions" id="archive-navigation" aria-label="站内导航">
+        <a class="archive-home" id="archive-home" href="#" aria-current="page">全部</a>
+      </nav>
     </div>
   </header>
-  <nav class="breadcrumbs page-column" aria-label="面包屑导航"><ol id="breadcrumbs"><li><span aria-current="page">首页</span></li></ol></nav>
+  <nav class="breadcrumbs page-column" aria-label="面包屑导航" hidden><ol id="breadcrumbs"></ol></nav>
   <main class="index-view page-column" id="index-view" aria-labelledby="index-title">
-    <h1 class="page-title" id="index-title" tabindex="-1">文章</h1>
+    <h1 class="page-title archive-title" id="index-title" tabindex="-1">文章</h1>
     <div class="index-toolbar" id="index-toolbar" role="search" hidden>
       <label for="search">标题或正文</label>
       <div class="search-controls">
@@ -54,11 +59,17 @@
   <main class="reading-view page-column" id="reading-view" hidden aria-labelledby="article-title">
     <article class="article" id="article" tabindex="-1" aria-labelledby="article-title">
       <header class="article-header">
+        <time class="article-date" id="article-date" hidden></time>
         <h1 id="article-title"></h1>
       </header>
       <div class="markdown-body" id="article-body"></div>
     </article>
     <nav class="article-navigation" id="article-navigation" aria-label="前后篇"></nav>
+    <footer class="reader-footer">
+      <a class="reader-back" id="reader-footer-back" href="#index">
+        <span aria-hidden="true">←</span> <span id="reader-footer-back-label">返回目录</span>
+      </a>
+    </footer>
   </main>
   <main class="message-view page-column" id="message-view" hidden aria-labelledby="message-title">
     <h1 id="message-title" tabindex="-1"></h1>

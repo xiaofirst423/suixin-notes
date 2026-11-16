@@ -3,6 +3,7 @@
   const { parseRoute, sortNotes, validateNotes, createNoteIndex, searchNotes, noteHref, sanitizeMarkdown, excerptText } = globalThis.SuixinCore;
   const $ = id => document.getElementById(id);
   const pinnedNoteIds = [
+    'fa75f8d6bf5ff0786573cb76', // music
     'bc09a6d9b9132db4f807430a', // obsidian
     '4817d38fc7cbd500122d79ba', // 一面
     'cb06b59ccd6731999454d08c'  // 二面
@@ -61,8 +62,8 @@
     else delete body.dataset.archiveDocked;
   }
 
-  function setNoteDate(node, updatedAt, prefix = '') {
-    const timestamp = typeof updatedAt === 'string' ? Date.parse(updatedAt) : NaN;
+  function setNoteDate(node, dateValue, prefix = '') {
+    const timestamp = typeof dateValue === 'string' ? Date.parse(dateValue) : NaN;
     node.hidden = !Number.isFinite(timestamp);
     if (node.hidden) {
       node.removeAttribute('datetime');
@@ -185,7 +186,7 @@
       link.className = 'note-row'; link.id = 'index-note-' + note.id; link.href = noteHref(note.id);
       const date = document.createElement('time');
       date.className = 'note-date';
-      setNoteDate(date, note.updatedAt);
+      setNoteDate(date, note.publishedAt ?? note.updatedAt);
       if (!date.hidden) link.append(date);
       const title = document.createElement('h2');
       title.className = 'note-title'; title.textContent = note.title;
@@ -222,7 +223,7 @@
       $(id + '-label').textContent = returnLabel;
     }
     $('article-title').textContent = note.title;
-    setNoteDate($('article-date'), note.updatedAt, '更新于 ');
+    setNoteDate($('article-date'), note.publishedAt ?? note.updatedAt, note.publishedAt ? '发布于 ' : '更新于 ');
     progress.value = 0;
     articleBody.replaceChildren(sanitizeMarkdown(note.markdown, note, state.index, state.notes));
     $('article-navigation').replaceChildren();
